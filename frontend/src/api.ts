@@ -149,3 +149,14 @@ export const uploadSkill = (roomId: string, agentKey: string, file: File) => {
 
 export const listSkills = (roomId: string, agentKey: string) =>
   request<SkillOut[]>(`/api/rooms/${roomId}/agents/${agentKey}/skills`);
+
+export const toggleSkill = (
+  roomId: string,
+  agentKey: string,
+  skillId: string,
+  enabled: boolean,
+) =>
+  request<SkillOut>(`/api/rooms/${roomId}/agents/${agentKey}/skills/${skillId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ enabled }),
+  });

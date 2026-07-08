@@ -221,6 +221,7 @@ class Orchestrator:
             select(AgentSkill)
             .where(
                 AgentSkill.agent_key == agent_key,
+                AgentSkill.enabled.is_(True),
                 (AgentSkill.room_id == room.id) | (AgentSkill.room_id.is_(None)),
             )
             .order_by(AgentSkill.created_at)

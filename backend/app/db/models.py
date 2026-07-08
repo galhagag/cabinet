@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     JSON,
     BigInteger,
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -183,6 +184,9 @@ class AgentSkill(Base):
     skill_type: Mapped[str] = mapped_column(String(8))
     blob_path: Mapped[str] = mapped_column(String(1024))
     content_text: Mapped[str] = mapped_column(Text)
+    # Toggled from the UI; disabled skills stay registered (and in blob
+    # storage) but are excluded from prompt compilation.
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

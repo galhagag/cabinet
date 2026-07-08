@@ -78,6 +78,14 @@ export default function RoomView({ roomId, onBack }: { roomId: string; onBack: (
         case "skill_added":
           pushToast("info", `Skill added${event.skill_name ? `: ${event.skill_name}` : ""}`);
           break;
+        case "skill_toggled":
+          pushToast(
+            "info",
+            `Skill ${event.enabled ? "enabled" : "disabled"}${
+              event.skill_name ? `: ${event.skill_name}` : ""
+            }`,
+          );
+          break;
         case "drive_linked":
         case "drive_connected":
           setDriveRefreshSignal((n) => n + 1);

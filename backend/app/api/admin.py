@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..agents.profiles import AGENT_KEYS
 from ..db.base import get_session
 from ..db.models import AgentGlobalConfig, AgentSkill, AuditLog
-from ..schemas import AgentConfigOut, AgentConfigUpdate, SkillOut
+from ..schemas import AgentConfigOut, AgentConfigUpdate, SkillOut, SkillToggle
 from ..services.skills import SkillsService
 from .deps import get_skills_service, require_admin
 
@@ -90,6 +90,30 @@ async def upload_global_skill(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return SkillOut.model_validate(skill, from_attributes=True)
+
+
+@router.patch("/skills/{skill_id}", response_model=SkillOut)
+async def toggle_global_skill(
+    skill_id: str,
+    payload: SkillToggle,
+    session: AsyncSession = Depends(get_session),
+    user_email: str = Depends(require_admin),
+) -> SkillOut:
+    """Enable/disable a global skill (applies to that agent in every room)."""
+    skill = await session.get(AgentSkill, skill_id)
+    if skill is None or skill.room_id is not None:
+        raise HTTPException(status_code=404, detail="global skill not found")
+
+    skill.enabled = payload.enabled
+    session.add(
+        AuditLog(
+            actor=user_email,
+            action="global_skill_toggled",
+            detail={"skill_id": skill.id, "enabled": payload.enabled},
+        )
+    )
+    await session.commit()
     return SkillOut.model_validate(skill, from_attributes=True)
 
 

@@ -118,6 +118,7 @@ export interface SkillOut {
   skill_name: string;
   skill_type: string;
   blob_path: string;
+  enabled: boolean;
   created_at: string;
 }
 
@@ -154,6 +155,14 @@ export interface WsSkillAdded {
   skill_name?: string;
 }
 
+export interface WsSkillToggled {
+  type: "skill_toggled";
+  agent_key?: string;
+  skill_id?: string;
+  skill_name?: string;
+  enabled?: boolean;
+}
+
 export interface WsDriveLinked {
   type: "drive_linked";
   google_folder_id?: string;
@@ -170,5 +179,6 @@ export type RoomWsEvent =
   | WsRoomPaused
   | WsRoomResumed
   | WsSkillAdded
+  | WsSkillToggled
   | WsDriveLinked
   | WsDriveConnected;

@@ -110,7 +110,12 @@ class SkillOut(BaseModel):
     skill_name: str
     skill_type: str
     blob_path: str
+    enabled: bool
     created_at: datetime
+
+
+class SkillToggle(BaseModel):
+    enabled: bool
 
 
 # --- Compiled prompt (debug/inspection) ----------------------------------------
