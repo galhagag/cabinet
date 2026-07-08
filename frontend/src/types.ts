@@ -84,7 +84,13 @@ export interface PostMessageResult {
 }
 
 // --- Google Drive -------------------------------------------------------------
-export type GDriveStatus = "none" | "pending" | "connected" | "linked" | "revoked";
+export type GDriveStatus =
+  | "none"
+  | "pending"
+  | "connected"
+  | "linked"
+  | "error"
+  | "revoked";
 
 export interface GDriveAuthorizeOut {
   authorize_url: string;

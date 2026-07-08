@@ -7,11 +7,13 @@ immutable and form the regulatory audit trail.
 from __future__ import annotations
 
 import secrets
+import time
 import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     DateTime,
     ForeignKey,
     Index,
@@ -86,9 +88,13 @@ class RoomAgent(Base):
 
 class Message(Base):
     __tablename__ = "messages"
-    __table_args__ = (Index("ix_messages_room_created", "room_id", "created_at"),)
+    __table_args__ = (Index("ix_messages_room_seq", "room_id", "seq"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    # Monotonic ordering key: created_at has only µs resolution and can tie
+    # within a burst of agent turns; seq (wall-clock ns) breaks ties
+    # deterministically. Ordering is always (seq, id).
+    seq: Mapped[int] = mapped_column(BigInteger, default=time.time_ns)
     room_id: Mapped[str] = mapped_column(ForeignKey("rooms.id", ondelete="CASCADE"))
     # "human" | "agent" | "system"
     sender_type: Mapped[str] = mapped_column(String(16))

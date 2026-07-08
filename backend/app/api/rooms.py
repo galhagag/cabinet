@@ -22,7 +22,7 @@ from ..schemas import (
     RoomMemberOut,
     RoomOut,
 )
-from .deps import get_current_user_email, get_orchestrator
+from .deps import get_current_user_email, get_orchestrator, require_room_member
 
 router = APIRouter(prefix="/api/rooms", tags=["rooms"])
 
@@ -147,14 +147,18 @@ async def join_room(
 
 @router.get("/{room_id}", response_model=RoomOut)
 async def get_room(
-    room_id: str, session: AsyncSession = Depends(get_session)
+    room_id: str,
+    session: AsyncSession = Depends(get_session),
+    _member: str = Depends(require_room_member),
 ) -> RoomOut:
     return _room_out(await _get_room_with_agents(session, room_id))
 
 
 @router.get("/{room_id}/members", response_model=list[RoomMemberOut])
 async def list_members(
-    room_id: str, session: AsyncSession = Depends(get_session)
+    room_id: str,
+    session: AsyncSession = Depends(get_session),
+    _member: str = Depends(require_room_member),
 ) -> list[RoomMemberOut]:
     result = await session.execute(
         select(RoomMember)
@@ -171,7 +175,7 @@ async def list_members(
 async def create_invite(
     room_id: str,
     session: AsyncSession = Depends(get_session),
-    user_email: str = Depends(get_current_user_email),
+    user_email: str = Depends(require_room_member),
 ) -> InviteCreateOut:
     room = await session.get(Room, room_id)
     if room is None:
@@ -206,6 +210,7 @@ async def get_compiled_prompt(
     agent_key: str,
     session: AsyncSession = Depends(get_session),
     orchestrator: Orchestrator = Depends(get_orchestrator),
+    _member: str = Depends(require_room_member),
 ) -> CompiledPromptOut:
     room = await session.get(Room, room_id)
     if room is None:

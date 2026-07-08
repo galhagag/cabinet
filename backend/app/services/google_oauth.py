@@ -8,7 +8,6 @@ The httpx transport is injectable so tests exercise the full code path over
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Awaitable
 
 import httpx
 from cryptography.fernet import Fernet
@@ -24,25 +23,6 @@ from .secrets import SecretProvider
 STATE_SALT = "gdrive-oauth"
 # Refresh proactively when the access token expires within this window.
 EXPIRY_SLACK_SECONDS = 60
-
-
-def _drive_sync_secret(coro: Awaitable[str]) -> str:
-    """Resolve a secret coroutine that completes without suspending.
-
-    ``encrypt``/``decrypt``/``verify_state`` are synchronous by contract, but
-    secret resolution is async. The env provider never actually awaits, so
-    its coroutine can be driven to completion synchronously. Async-only
-    providers (Key Vault) are primed through the async code paths instead.
-    """
-    try:
-        coro.send(None)  # type: ignore[attr-defined]
-    except StopIteration as stop:
-        return stop.value
-    finally:
-        coro.close()  # type: ignore[attr-defined]
-    raise RuntimeError(
-        "secret requires async resolution; prime it via an async method first"
-    )
 
 
 class GoogleOAuthService:
@@ -61,14 +41,6 @@ class GoogleOAuthService:
     # ------------------------------------------------------------------
     # State signing
     # ------------------------------------------------------------------
-    def _get_serializer(self) -> URLSafeTimedSerializer:
-        if self._serializer is None:
-            key = _drive_sync_secret(
-                self._secrets.get_secret(self._settings.state_signing_key_secret)
-            )
-            self._serializer = URLSafeTimedSerializer(key, salt=STATE_SALT)
-        return self._serializer
-
     async def _ensure_serializer(self) -> URLSafeTimedSerializer:
         if self._serializer is None:
             key = await self._secrets.get_secret(
@@ -77,10 +49,16 @@ class GoogleOAuthService:
             self._serializer = URLSafeTimedSerializer(key, salt=STATE_SALT)
         return self._serializer
 
-    def verify_state(self, state: str, max_age: int = 900) -> dict:
-        """Verify + decode a signed OAuth state; ValueError on tamper/expiry."""
+    async def verify_state(self, state: str, max_age: int = 900) -> dict:
+        """Verify + decode a signed OAuth state; ValueError on tamper/expiry.
+
+        Async because the signing key comes from the secret provider — on a
+        fresh replica (Key Vault) this is a network fetch, so the callback
+        must be able to verify state without having served /authorize first.
+        """
+        serializer = await self._ensure_serializer()
         try:
-            return self._get_serializer().loads(state, max_age=max_age)
+            return serializer.loads(state, max_age=max_age)
         except BadSignature as exc:  # SignatureExpired subclasses BadSignature
             raise ValueError(f"invalid oauth state: {exc}") from exc
 
@@ -153,10 +131,10 @@ class GoogleOAuthService:
     # ------------------------------------------------------------------
     def _get_fernet(self) -> Fernet:
         if self._fernet is None:
-            key = _drive_sync_secret(
-                self._secrets.get_secret(self._settings.token_encryption_key_secret)
+            raise RuntimeError(
+                "Fernet key not primed — every code path that encrypts or "
+                "decrypts must first `await self._ensure_fernet()`"
             )
-            self._fernet = Fernet(key.encode())
         return self._fernet
 
     async def _ensure_fernet(self) -> Fernet:

@@ -31,7 +31,13 @@ _sessionmaker: async_sessionmaker[AsyncSession] | None = None
 def get_engine() -> AsyncEngine:
     global _engine, _sessionmaker
     if _engine is None:
-        _engine = create_async_engine(get_settings().database_url, future=True)
+        url = get_settings().database_url
+        kwargs: dict = {"future": True}
+        if url.startswith("sqlite"):
+            # Concurrent writers (loop-budget claims) must wait for the file
+            # lock instead of failing with "database is locked".
+            kwargs["connect_args"] = {"timeout": 30}
+        _engine = create_async_engine(url, **kwargs)
         _sessionmaker = async_sessionmaker(_engine, expire_on_commit=False)
     return _engine
 

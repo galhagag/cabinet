@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import Settings
@@ -68,13 +68,20 @@ class Orchestrator:
         session.add(human_msg)
 
         # Human input always resets the loop budget and unpauses the room.
-        room.cycles_used = 0
-        if room.status == PAUSED:
-            room.status = ACTIVE
+        # Written as an explicit UPDATE so concurrent requests contend on the
+        # row rather than clobbering each other through stale ORM state.
+        was_paused = room.status == PAUSED
+        await session.execute(
+            update(Room)
+            .where(Room.id == room.id)
+            .values(cycles_used=0, status=ACTIVE)
+        )
+        await session.commit()
+        await session.refresh(room)
+        if was_paused:
             await self._broker.publish(
                 room.id, {"type": "room_resumed", "room_id": room.id}
             )
-        await session.commit()
         await self._broker.publish(room.id, self._msg_event(human_msg))
 
         created = [human_msg]
@@ -117,11 +124,17 @@ class Orchestrator:
         self, session: AsyncSession, room: Room
     ) -> list[Message]:
         created: list[Message] = []
-        if room.status == PAUSED:
-            return created  # server-side lockout: no agent speaks while paused
 
         speaker = await self._first_speaker(session, room)
-        while room.cycles_used < room.cycle_limit:
+        while True:
+            # Atomically claim one cycle from the shared budget. The WHERE
+            # clause is the server-side enforcement: a paused room or an
+            # exhausted budget claims nothing, no matter how many requests
+            # (or replicas) run this loop concurrently.
+            cycle = await self._claim_cycle(session, room)
+            if cycle is None:
+                break
+
             system_prompt = await self.compiled_prompt(session, room, speaker)
             turns = await self._history_as_turns(session, room, speaker)
             await self._broker.publish(
@@ -131,13 +144,12 @@ class Orchestrator:
                 agent_key=speaker, system_prompt=system_prompt, turns=turns
             )
 
-            room.cycles_used += 1
             msg = Message(
                 room_id=room.id,
                 sender_type="agent",
                 sender_name=DISPLAY_NAMES[speaker],
                 agent_key=speaker,
-                cycle_number=room.cycles_used,
+                cycle_number=cycle,
                 content=reply,
             )
             session.add(msg)
@@ -149,20 +161,51 @@ class Orchestrator:
                 break
             speaker = FCE_KEY if speaker == DATA_EXPERT_KEY else DATA_EXPERT_KEY
 
-        if room.cycles_used >= room.cycle_limit:
-            room.status = PAUSED
-            await session.commit()
+        await self._pause_if_exhausted(session, room)
+        await session.refresh(room)
+        return created
+
+    async def _claim_cycle(self, session: AsyncSession, room: Room) -> int | None:
+        """Atomically consume one cycle; None when paused or budget exhausted."""
+        result = await session.execute(
+            update(Room)
+            .where(
+                Room.id == room.id,
+                Room.status == ACTIVE,
+                Room.cycles_used < Room.cycle_limit,
+            )
+            .values(cycles_used=Room.cycles_used + 1)
+            .returning(Room.cycles_used)
+        )
+        claimed = result.scalar_one_or_none()
+        await session.commit()
+        return claimed
+
+    async def _pause_if_exhausted(self, session: AsyncSession, room: Room) -> None:
+        """Transition active→paused exactly once when the budget is spent."""
+        result = await session.execute(
+            update(Room)
+            .where(
+                Room.id == room.id,
+                Room.status == ACTIVE,
+                Room.cycles_used >= Room.cycle_limit,
+            )
+            .values(status=PAUSED)
+            .returning(Room.cycles_used, Room.cycle_limit)
+        )
+        row = result.one_or_none()
+        await session.commit()
+        if row is not None:
             await self._broker.publish(
                 room.id,
                 {
                     "type": "room_paused",
                     "room_id": room.id,
                     "reason": "cycle_budget_exhausted",
-                    "cycles_used": room.cycles_used,
-                    "cycle_limit": room.cycle_limit,
+                    "cycles_used": row.cycles_used,
+                    "cycle_limit": row.cycle_limit,
                 },
             )
-        return created
 
     # ------------------------------------------------------------------
     # Prompt & history compilation
@@ -204,7 +247,7 @@ class Orchestrator:
         result = await session.execute(
             select(Message)
             .where(Message.room_id == room.id)
-            .order_by(Message.created_at.desc(), Message.id.desc())
+            .order_by(Message.seq.desc(), Message.id.desc())
             .limit(self._settings.history_window)
         )
         history = list(reversed(result.scalars().all()))
@@ -239,7 +282,7 @@ class Orchestrator:
         result = await session.execute(
             select(Message.agent_key)
             .where(Message.room_id == room.id, Message.sender_type == "agent")
-            .order_by(Message.created_at.desc(), Message.id.desc())
+            .order_by(Message.seq.desc(), Message.id.desc())
             .limit(1)
         )
         last = result.scalar_one_or_none()

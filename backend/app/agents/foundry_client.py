@@ -73,7 +73,11 @@ class FoundryLLM:
         if settings.foundry_auth == "entra":
             # Microsoft Entra ID authentication (managed identity / workload
             # identity on ACA/AKS). azure-identity is a production-only dep.
-            from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+            # aio credential: token acquisition must not block the event loop.
+            from azure.identity.aio import (
+                DefaultAzureCredential,
+                get_bearer_token_provider,
+            )
 
             kwargs["azure_ad_token_provider"] = get_bearer_token_provider(
                 DefaultAzureCredential(),

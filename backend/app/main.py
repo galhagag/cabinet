@@ -55,7 +55,9 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],  # dev; production restricts to the frontend origin
-        allow_credentials=True,
+        # Wildcard origins + credentials is an invalid combination browsers
+        # reject; the dev identity header is not a credential, so keep False.
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )

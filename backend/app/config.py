@@ -117,6 +117,11 @@ class Settings:
         default_factory=lambda: int(_env("CABINET_INVITE_TTL_HOURS", "168"))
     )
 
+    # --- Authorization -------------------------------------------------------
+    # Comma-separated allowlist for /api/admin/*. Empty ⇒ open (dev only);
+    # production MUST set this (or replace with an Entra ID role check).
+    admin_emails: str = field(default_factory=lambda: _env("CABINET_ADMIN_EMAILS", ""))
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

@@ -8,10 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..agents.orchestrator import RealtimeBroker
 from ..agents.profiles import AGENT_KEYS
 from ..db.base import get_session
-from ..db.models import AgentSkill, Room
+from ..db.models import AgentSkill
 from ..schemas import SkillOut
 from ..services.skills import SkillsService
-from .deps import get_broker, get_current_user_email, get_skills_service
+from .deps import get_broker, get_skills_service, require_room_member
 
 router = APIRouter(tags=["skills"])
 
@@ -28,11 +28,8 @@ async def upload_skill(
     session: AsyncSession = Depends(get_session),
     skills_service: SkillsService = Depends(get_skills_service),
     broker: RealtimeBroker = Depends(get_broker),
-    user_email: str = Depends(get_current_user_email),
+    user_email: str = Depends(require_room_member),
 ) -> SkillOut:
-    room = await session.get(Room, room_id)
-    if room is None:
-        raise HTTPException(status_code=404, detail="room not found")
     if agent_key not in AGENT_KEYS:
         raise HTTPException(status_code=400, detail=f"unknown agent: {agent_key}")
 
@@ -69,11 +66,8 @@ async def list_skills(
     room_id: str,
     agent_key: str,
     session: AsyncSession = Depends(get_session),
+    _member: str = Depends(require_room_member),
 ) -> list[SkillOut]:
-    room = await session.get(Room, room_id)
-    if room is None:
-        raise HTTPException(status_code=404, detail="room not found")
-
     result = await session.execute(
         select(AgentSkill)
         .where(

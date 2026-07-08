@@ -60,7 +60,9 @@ class AzureWebPubSubBroker:
 
     async def _get_client(self):
         if self._client is None:
-            from azure.messaging.webpubsubservice import WebPubSubServiceClient
+            # aio client: send_to_group is awaited — the sync SDK would block
+            # the event loop on every agent turn.
+            from azure.messaging.webpubsubservice.aio import WebPubSubServiceClient
 
             connection_string = await self._secrets.get_secret(
                 "webpubsub-connection-string"
@@ -72,7 +74,7 @@ class AzureWebPubSubBroker:
 
     async def publish(self, room_id: str, event: dict) -> None:
         client = await self._get_client()
-        client.send_to_group(
+        await client.send_to_group(
             room_id, json.dumps(event), content_type="application/json"
         )
 

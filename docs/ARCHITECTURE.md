@@ -272,6 +272,13 @@ human message (or resume) ──▶ orchestrator.run_autonomous_loop(room)
   room history window.
 - Pause state is visible in the UI (`LoopBudgetBanner`) and enforced server-side —
   agents cannot speak in a paused room until a human posts.
+- **Concurrency safety**: each cycle is claimed with an atomic conditional
+  `UPDATE … WHERE status='active' AND cycles_used < cycle_limit RETURNING`, so
+  overlapping requests (or replicas) share one budget and can never exceed the
+  cap; the paused→active transitions (human message, Resume) are equally atomic.
+- The explicit **Resume** control is a deliberate human action that grants a
+  fresh budget without new message content; it is subject to the same atomic
+  transition (concurrent clicks: one wins, the rest get 409).
 
 ### 5.4 Mention Routing
 

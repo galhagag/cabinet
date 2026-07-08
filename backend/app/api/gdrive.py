@@ -10,7 +10,7 @@ from ..db.base import get_session
 from ..db.models import AuditLog, GDriveConnection, Room
 from ..schemas import GDriveAuthorizeOut, GDriveFolderLink, GDriveStatusOut
 from ..services.google_oauth import GoogleOAuthService
-from .deps import get_broker, get_current_user_email, get_google_oauth
+from .deps import get_broker, get_google_oauth, require_room_member
 
 router = APIRouter(tags=["gdrive"])
 
@@ -41,12 +41,8 @@ async def gdrive_authorize(
     room_id: str,
     session: AsyncSession = Depends(get_session),
     google_oauth: GoogleOAuthService = Depends(get_google_oauth),
-    user_email: str = Depends(get_current_user_email),
+    user_email: str = Depends(require_room_member),
 ) -> GDriveAuthorizeOut:
-    room = await session.get(Room, room_id)
-    if room is None:
-        raise HTTPException(status_code=404, detail="room not found")
-
     conn = await _get_connection(session, room_id)
     if conn is None:
         conn = GDriveConnection(room_id=room_id, status="pending")
@@ -68,7 +64,7 @@ async def gdrive_callback(
     broker: RealtimeBroker = Depends(get_broker),
 ) -> dict:
     try:
-        payload = google_oauth.verify_state(state)
+        payload = await google_oauth.verify_state(state)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -99,7 +95,7 @@ async def gdrive_link_folder(
     payload: GDriveFolderLink,
     session: AsyncSession = Depends(get_session),
     broker: RealtimeBroker = Depends(get_broker),
-    user_email: str = Depends(get_current_user_email),
+    user_email: str = Depends(require_room_member),
 ) -> GDriveStatusOut:
     conn = await _get_connection(session, room_id)
     if conn is None or conn.status not in ("connected", "linked"):
@@ -124,8 +120,9 @@ async def gdrive_link_folder(
         {
             "type": "drive_linked",
             "room_id": room_id,
-            "folder_id": payload.folder_id,
-            "folder_name": payload.folder_name,
+            # Keys match the frontend WsDriveLinked contract (types.ts).
+            "google_folder_id": payload.folder_id,
+            "google_folder_name": payload.folder_name,
         },
     )
     return _status_out(conn)
@@ -133,7 +130,9 @@ async def gdrive_link_folder(
 
 @router.get("/api/rooms/{room_id}/gdrive/status", response_model=GDriveStatusOut)
 async def gdrive_status(
-    room_id: str, session: AsyncSession = Depends(get_session)
+    room_id: str,
+    session: AsyncSession = Depends(get_session),
+    _member: str = Depends(require_room_member),
 ) -> GDriveStatusOut:
     conn = await _get_connection(session, room_id)
     if conn is None:
@@ -145,7 +144,7 @@ async def gdrive_status(
 async def gdrive_revoke(
     room_id: str,
     session: AsyncSession = Depends(get_session),
-    user_email: str = Depends(get_current_user_email),
+    user_email: str = Depends(require_room_member),
 ) -> GDriveStatusOut:
     conn = await _get_connection(session, room_id)
     if conn is None:

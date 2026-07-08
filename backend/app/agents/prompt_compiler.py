@@ -46,7 +46,9 @@ def compile_system_prompt(
     return "\n\n".join(parts)
 
 
-_MENTION_RE = re.compile(r"@([A-Za-z_]+)")
+# Negative lookbehind: an "@" inside an email address (john@fce-bank.com)
+# is preceded by a word character or dot and must NOT count as a mention.
+_MENTION_RE = re.compile(r"(?<![\w.])@([A-Za-z_]+)")
 
 
 def parse_mention(content: str) -> str | None:
