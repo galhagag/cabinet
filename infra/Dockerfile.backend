@@ -1,0 +1,17 @@
+# Cabinet of Experts — backend API (FastAPI)
+# Target: Azure Container Apps / AKS
+FROM python:3.11-slim
+
+WORKDIR /srv/cabinet
+
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY backend/app ./app
+
+# Non-root runtime user
+RUN useradd --create-home cabinet
+USER cabinet
+
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

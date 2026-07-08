@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+*.db
+.blob/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Env / local
+.env
+.venv/
+smoke.db

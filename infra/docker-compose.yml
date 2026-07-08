@@ -1,0 +1,50 @@
+# Local prod-parity stack: Postgres + backend + frontend.
+# Usage:  docker compose -f infra/docker-compose.yml --env-file infra/.env up
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cabinet
+      POSTGRES_PASSWORD: cabinet
+      POSTGRES_DB: cabinet
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cabinet"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.backend
+    environment:
+      CABINET_DATABASE_URL: postgresql+asyncpg://cabinet:cabinet@postgres:5432/cabinet
+      CABINET_LLM_MODE: ${CABINET_LLM_MODE:-mock}
+      CABINET_FOUNDRY_RESOURCE: ${CABINET_FOUNDRY_RESOURCE:-}
+      CABINET_FOUNDRY_MODEL: ${CABINET_FOUNDRY_MODEL:-claude-opus-4-8}
+      CABINET_SECRETS_PROVIDER: ${CABINET_SECRETS_PROVIDER:-env}
+      CABINET_BLOB_PROVIDER: ${CABINET_BLOB_PROVIDER:-local}
+      CABINET_REALTIME_PROVIDER: ${CABINET_REALTIME_PROVIDER:-inprocess}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.frontend
+      args:
+        VITE_API_BASE: http://localhost:8000
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
