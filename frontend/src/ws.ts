@@ -1,11 +1,19 @@
 // Room WebSocket client with auto-reconnect and exponential backoff.
 import { API_BASE } from "./api";
+import { getAccessToken, isEntraAuth } from "./auth";
 import type { RoomWsEvent } from "./types";
 
-function wsUrl(roomId: string): string {
+async function wsUrl(roomId: string): Promise<string> {
   const base = new URL(API_BASE, window.location.origin);
   const proto = base.protocol === "https:" ? "wss:" : "ws:";
-  return `${proto}//${base.host}/ws/rooms/${roomId}`;
+  const url = new URL(`${proto}//${base.host}/ws/rooms/${roomId}`);
+  // Browsers cannot set an Authorization header on the WS handshake, so the
+  // verified Entra ID access token travels as a query param instead; the
+  // backend validates it the same way as the HTTP bearer token (ws.py).
+  if (isEntraAuth) {
+    url.searchParams.set("access_token", await getAccessToken());
+  }
+  return url.toString();
 }
 
 export type WsEventHandler = (event: RoomWsEvent) => void;
@@ -29,9 +37,19 @@ export class RoomSocket {
 
   private open(): void {
     if (this.roomId === null || this.closedByUser) return;
+    const roomId = this.roomId;
+    wsUrl(roomId)
+      .then((url) => this.openWithUrl(roomId, url))
+      .catch(() => this.scheduleReconnect());
+  }
+
+  private openWithUrl(roomId: string, url: string): void {
+    // The room/token-acquiring await above may have outlived a close() or a
+    // switch to a different room; drop a now-stale connect attempt.
+    if (this.roomId !== roomId || this.closedByUser) return;
     let ws: WebSocket;
     try {
-      ws = new WebSocket(wsUrl(this.roomId));
+      ws = new WebSocket(url);
     } catch {
       this.scheduleReconnect();
       return;

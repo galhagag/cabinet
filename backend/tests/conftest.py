@@ -15,16 +15,49 @@ import pytest
 from fastapi.testclient import TestClient
 
 
-@pytest.fixture()
-def client(tmp_path, monkeypatch):
+def _configure_env(tmp_path, monkeypatch, db_name: str) -> None:
     monkeypatch.setenv(
-        "CABINET_DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path / 'test.db'}"
+        "CABINET_DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path / db_name}"
     )
     monkeypatch.setenv("CABINET_LLM_MODE", "mock")
     monkeypatch.setenv("CABINET_SECRETS_PROVIDER", "env")
     monkeypatch.setenv("CABINET_BLOB_PROVIDER", "local")
     monkeypatch.setenv("CABINET_LOCAL_BLOB_ROOT", str(tmp_path / "blob"))
     monkeypatch.setenv("CABINET_REALTIME_PROVIDER", "inprocess")
+
+
+@pytest.fixture()
+def client(tmp_path, monkeypatch):
+    _configure_env(tmp_path, monkeypatch, "test.db")
+
+    from app.config import reset_settings_cache
+    from app.db.base import dispose_engine
+
+    reset_settings_cache()
+    asyncio.run(dispose_engine())
+
+    from app.main import create_app
+
+    app = create_app()
+    with TestClient(app) as test_client:
+        yield test_client
+
+    reset_settings_cache()
+    asyncio.run(dispose_engine())
+
+
+@pytest.fixture()
+def entra_client(tmp_path, monkeypatch):
+    """Same harness as ``client`` but with CABINET_AUTH_MODE=entra.
+
+    The Entra validator is constructed for real by the app's lifespan (a
+    tenant id + audience are configured); tests then swap its JWKS transport
+    for a MockTransport via ``install_mock_entra`` before issuing requests.
+    """
+    _configure_env(tmp_path, monkeypatch, "entra_test.db")
+    monkeypatch.setenv("CABINET_AUTH_MODE", "entra")
+    monkeypatch.setenv("CABINET_ENTRA_TENANT_ID", "test-tenant")
+    monkeypatch.setenv("CABINET_ENTRA_CLIENT_ID", "test-api-client-id")
 
     from app.config import reset_settings_cache
     from app.db.base import dispose_engine
@@ -82,6 +115,57 @@ def google_token_handler(calls: list):
         return httpx.Response(400, json={"error": "unsupported_grant_type"})
 
     return handler
+
+
+def make_entra_keypair():
+    """Generate an RSA keypair + matching JWKS doc for Entra auth tests."""
+    from jose import jwk
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_jwk = jwk.RSAKey(
+        algorithm="RS256", key=private_key.public_key()
+    ).to_dict()
+    public_jwk["kid"] = "test-kid-1"
+    public_jwk["use"] = "sig"
+    return private_key, {"keys": [public_jwk]}
+
+
+def make_entra_token(private_key, *, kid="test-kid-1", **claim_overrides):
+    from jose import jwt as jose_jwt
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    claims = {
+        "iss": "https://login.microsoftonline.com/test-tenant/v2.0",
+        "aud": "test-api-client-id",
+        "exp": now + timedelta(hours=1),
+        "iat": now,
+        "preferred_username": "alice@thetaray.com",
+    }
+    claims.update(claim_overrides)
+    from cryptography.hazmat.primitives import serialization
+
+    pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    return jose_jwt.encode(claims, pem, algorithm="RS256", headers={"kid": kid})
+
+
+def install_mock_entra(app, jwks: dict):
+    """Swap the app's EntraTokenValidator for one backed by a MockTransport."""
+    import httpx
+
+    from app.services.entra_auth import EntraTokenValidator
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=jwks)
+
+    app.state.entra_validator = EntraTokenValidator(
+        app.state.settings, transport=httpx.MockTransport(handler)
+    )
 
 
 def install_mock_google(app) -> list:

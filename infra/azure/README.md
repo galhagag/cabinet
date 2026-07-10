@@ -40,6 +40,21 @@ az webpubsub create -g $RG -n cabinet-wps --sku Free_F1
 
 # Microsoft Foundry (Azure AI) — deploy a Claude model (serverless / MaaS)
 # via Azure AI Studio; note the resource name for CABINET_FOUNDRY_RESOURCE.
+
+# Entra ID app registrations for auth (CABINET_AUTH_MODE=entra):
+#  - API app: exposes the scope the backend accepts as its token audience.
+API_APP_ID=$(az ad app create --display-name cabinet-api \
+  --sign-in-audience AzureADMyOrg --query appId -o tsv)
+az ad app permission add --id $API_APP_ID # then expose "access_as_user" scope
+#    (Azure Portal → App registrations → cabinet-api → Expose an API → Add a scope)
+#  - SPA app: the frontend's public client, used by MSAL to sign users in and
+#    request an access token for the API app's scope.
+SPA_APP_ID=$(az ad app create --display-name cabinet-frontend \
+  --sign-in-audience AzureADMyOrg \
+  --spa-redirect-uris https://<frontend-fqdn> --query appId -o tsv)
+az ad app permission add --id $SPA_APP_ID --api $API_APP_ID \
+  --api-permissions <access_as_user-scope-id>=Scope
+TENANT_ID=$(az account show --query tenantId -o tsv)
 ```
 
 ## 2. Deploy the API (Container Apps)
@@ -64,8 +79,16 @@ az containerapp create -g $RG -n cabinet-api \
     CABINET_BLOB_PROVIDER=azure_blob \
     CABINET_REALTIME_PROVIDER=azure_webpubsub \
     CABINET_DATABASE_URL='postgresql+asyncpg://...' \
-    CABINET_GOOGLE_REDIRECT_URI=https://<api-fqdn>/api/gdrive/callback
+    CABINET_GOOGLE_REDIRECT_URI=https://<api-fqdn>/api/gdrive/callback \
+    CABINET_AUTH_MODE=entra \
+    CABINET_ENTRA_TENANT_ID=$TENANT_ID \
+    CABINET_ENTRA_CLIENT_ID=$API_APP_ID
 ```
+
+Frontend build (or Container App env, if the SPA is served dynamically) needs
+the matching `VITE_AUTH_MODE=entra`, `VITE_ENTRA_TENANT_ID=$TENANT_ID`,
+`VITE_ENTRA_CLIENT_ID=$SPA_APP_ID`, and
+`VITE_ENTRA_API_SCOPE=api://$API_APP_ID/access_as_user`.
 
 Grant the app's managed identity:
 
@@ -83,5 +106,8 @@ az keyvault set-policy -n cabinet-kv --object-id <app-mi-object-id> --secret-per
 5. Point `CABINET_DATABASE_URL` at the Flexible Server (sslmode=require).
 6. Register the production redirect URI in the Google Cloud OAuth consent
    screen and update `CABINET_GOOGLE_REDIRECT_URI`.
-7. Replace the dev `X-User-Email` header identity (`app/api/deps.py`) with
-   Microsoft Entra ID JWT validation.
+7. `CABINET_AUTH_MODE=dev → entra` (+ `CABINET_ENTRA_TENANT_ID` /
+   `CABINET_ENTRA_CLIENT_ID` from the API app registration above, and the
+   matching `VITE_AUTH_MODE`/`VITE_ENTRA_*` frontend build vars) — swaps the
+   dev `X-User-Email` header for verified Microsoft Entra ID JWTs
+   (`app/services/entra_auth.py`); no other code changes.

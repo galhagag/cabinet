@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from fastapi import Depends, Header, HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,23 +10,45 @@ from ..agents.orchestrator import Orchestrator, RealtimeBroker
 from ..config import get_settings
 from ..db.base import get_session
 from ..db.models import Room, RoomMember
+from ..services.entra_auth import EntraTokenError, EntraTokenValidator
 from ..services.google_oauth import GoogleOAuthService
 from ..services.realtime import ConnectionManager
 from ..services.skills import SkillsService
 
 DEFAULT_DEV_EMAIL = "dev@thetaray.com"
 
+# auto_error=False: in "dev" auth mode there may be no bearer token at all,
+# and we want to fall through to the X-User-Email header rather than 403.
+_bearer_scheme = HTTPBearer(auto_error=False)
 
-def get_current_user_email(
+
+async def get_current_user_email(
+    request: Request,
     x_user_email: str = Header(default=DEFAULT_DEV_EMAIL),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
 ) -> str:
-    """Caller identity from the ``X-User-Email`` header (dev/test only).
+    """Caller identity.
 
-    Production swaps this single dependency for Microsoft Entra ID JWT
-    validation (bearer token → verified email claim); everything downstream
-    is unchanged.
+    ``CABINET_AUTH_MODE=dev`` (default): the ``X-User-Email`` header, trusted
+    as-is — dev/test only, never set in production.
+
+    ``CABINET_AUTH_MODE=entra``: the ``Authorization: Bearer`` access token is
+    verified against the tenant's Entra ID JWKS (signature, issuer, audience,
+    expiry); the caller's email comes from the token's verified claims, never
+    from a client-supplied header. Everything downstream (membership checks,
+    admin allowlist) is unchanged either way.
     """
-    return x_user_email
+    settings = get_settings()
+    if settings.auth_mode != "entra":
+        return x_user_email
+
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="missing bearer token")
+    validator: EntraTokenValidator = request.app.state.entra_validator
+    try:
+        return await validator.validate(credentials.credentials)
+    except EntraTokenError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
 
 
 async def is_room_member(

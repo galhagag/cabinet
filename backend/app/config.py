@@ -122,6 +122,22 @@ class Settings:
     # production MUST set this (or replace with an Entra ID role check).
     admin_emails: str = field(default_factory=lambda: _env("CABINET_ADMIN_EMAILS", ""))
 
+    # --- Authentication --------------------------------------------------------
+    # "dev"   → trusted X-User-Email header (no verification; dev/test only)
+    # "entra" → Microsoft Entra ID access tokens verified against the tenant's
+    #           JWKS (signature, issuer, audience, expiry) — no shared secret.
+    auth_mode: str = field(default_factory=lambda: _env("CABINET_AUTH_MODE", "dev"))
+    # Directory (tenant) ID of the Entra ID tenant issuing tokens.
+    entra_tenant_id: str = field(
+        default_factory=lambda: _env("CABINET_ENTRA_TENANT_ID", "")
+    )
+    # Application (client) ID of the *API* app registration — the expected
+    # token audience. Note: this is distinct from the frontend SPA client ID
+    # used by MSAL to acquire tokens.
+    entra_client_id: str = field(
+        default_factory=lambda: _env("CABINET_ENTRA_CLIENT_ID", "")
+    )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
