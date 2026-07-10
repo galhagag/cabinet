@@ -1,0 +1,17 @@
+.git
+.gitignore
+README.md
+docs/
+
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.egg-info/
+backend/.pytest_cache/
+backend/*.db
+backend/.blob/
+
+frontend/node_modules/
+frontend/dist/
+
+infra/.env
