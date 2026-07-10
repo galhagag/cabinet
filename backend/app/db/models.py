@@ -103,6 +103,9 @@ class Message(Base):
     mention_target: Mapped[str | None] = mapped_column(String(32), nullable=True)
     cycle_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     content: Mapped[str] = mapped_column(Text)
+    # Populated for agent replies only — usage reported by the LLM backend.
+    input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

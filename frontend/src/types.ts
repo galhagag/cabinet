@@ -29,6 +29,14 @@ export interface RoomAgentOut {
   display_name: string;
 }
 
+export interface RoomLastMessageOut {
+  sender_type: SenderType;
+  sender_name: string;
+  agent_key: string | null;
+  content: string;
+  created_at: string;
+}
+
 export interface RoomOut {
   id: string;
   customer_name: string;
@@ -38,6 +46,8 @@ export interface RoomOut {
   cycle_limit: number;
   created_at: string;
   agents: RoomAgentOut[];
+  member_count: number;
+  last_message: RoomLastMessageOut | null;
 }
 
 export interface RoomMemberOut {
@@ -73,6 +83,8 @@ export interface MessageOut {
   mention_target: string | null;
   cycle_number: number | null;
   content: string;
+  input_tokens: number | null;
+  output_tokens: number | null;
   created_at: string;
 }
 
