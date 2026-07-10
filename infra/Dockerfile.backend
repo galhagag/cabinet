@@ -9,8 +9,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/app ./app
 
-# Non-root runtime user
-RUN useradd --create-home cabinet
+# Non-root runtime user; owns the workdir so it can create local blob
+# storage / sqlite db files at runtime.
+RUN useradd --create-home cabinet && chown -R cabinet:cabinet /srv/cabinet
 USER cabinet
 
 EXPOSE 8000
