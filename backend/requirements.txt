@@ -12,6 +12,7 @@ itsdangerous>=2.2        # HMAC-signed OAuth state
 python-jose[cryptography]>=3.3  # Entra ID access-token (JWT/JWKS) verification
 python-multipart>=0.0.9  # skill file uploads
 pydantic>=2.7
+python-dotenv>=1.0       # loads infra/.env for local dev (see app/config.py)
 
 # --- Azure (production providers; imported lazily) --------------------------
 azure-identity>=1.17

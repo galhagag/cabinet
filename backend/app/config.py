@@ -16,6 +16,23 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from functools import lru_cache
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# `uvicorn app.main:app --reload` (the README quick start) never sees
+# infra/.env on its own — nothing else loads it into the process. Load it
+# here so CABINET_SECRET_* dev overrides reach EnvSecretProvider; no-op if
+# the file is absent (prod/CI), and never overrides a var already set
+# (override=False default) so real container env vars always win.
+INFRA_ENV_PATH = Path(__file__).resolve().parent.parent.parent / "infra" / ".env"
+
+
+def _load_local_dev_env(path: Path = INFRA_ENV_PATH) -> None:
+    load_dotenv(path, override=False)
+
+
+_load_local_dev_env()
 
 
 def _env(name: str, default: str = "") -> str:
