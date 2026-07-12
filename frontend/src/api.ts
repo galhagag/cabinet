@@ -13,8 +13,7 @@ import type {
   SkillOut,
 } from "./types";
 
-export const API_BASE: string =
-  (import.meta.env.VITE_API_BASE as string | undefined) ?? "http://localhost:8000";
+export const API_BASE: string = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
 
 const EMAIL_KEY = "cabinet_user_email";
 const DEFAULT_EMAIL = "dev@thetaray.com";

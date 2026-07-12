@@ -5,17 +5,27 @@ Production path uses the official ``AsyncAnthropicFoundry`` client from the
 key resolved through the SecretProvider (Azure Key Vault in prod) or with
 Microsoft Entra ID via ``azure_ad_token_provider``.
 
+``CABINET_LLM_MODE=azure_openai`` selects AzureOpenAILLM — GPT models on the
+same kind of Microsoft Foundry resource, via the official ``openai`` SDK's
+``AsyncAzureOpenAI`` client (Chat Completions API), authenticated the same
+two ways as Foundry: an Azure AI API key or Microsoft Entra ID.
+
 ``CABINET_LLM_MODE=mock`` selects MockLLM: deterministic, domain-flavored
 replies that exercise the full orchestration path (loop budget, mentions,
 handoffs) with zero network and zero credentials.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Protocol
 
+import httpx
+
 from ..config import Settings
 from .profiles import DATA_EXPERT_KEY, FCE_KEY
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -130,6 +140,73 @@ class FoundryLLM:
         return LLMResult(text=text, input_tokens=input_tokens, output_tokens=output_tokens)
 
 
+class AzureOpenAILLM:
+    """GPT models on Microsoft Foundry through the official Azure OpenAI SDK."""
+
+    def __init__(
+        self,
+        settings: Settings,
+        api_key: str | None = None,
+        http_client: httpx.AsyncClient | None = None,
+    ) -> None:
+        from openai import AsyncAzureOpenAI
+
+        self._settings = settings
+        kwargs: dict = {
+            "azure_endpoint": settings.azure_openai_endpoint,
+            "api_version": settings.azure_openai_api_version,
+        }
+        if http_client is not None:
+            kwargs["http_client"] = http_client
+        if settings.azure_openai_auth == "entra":
+            from azure.identity.aio import (
+                DefaultAzureCredential,
+                get_bearer_token_provider,
+            )
+
+            kwargs["azure_ad_token_provider"] = get_bearer_token_provider(
+                DefaultAzureCredential(),
+                "https://cognitiveservices.azure.com/.default",
+            )
+        else:
+            kwargs["api_key"] = api_key
+        self._client = AsyncAzureOpenAI(**kwargs)
+
+    async def complete(
+        self, *, agent_key: str, system_prompt: str, turns: list[ChatTurn]
+    ) -> LLMResult:
+        messages = [{"role": "system", "content": system_prompt}] + [
+            {"role": t.role, "content": t.content} for t in turns
+        ]
+        response = await self._client.chat.completions.create(
+            model=self._settings.azure_openai_deployment,
+            max_completion_tokens=self._settings.agent_max_tokens,
+            messages=messages,
+        )
+        choice = response.choices[0]
+        usage = response.usage
+        input_tokens = getattr(usage, "prompt_tokens", 0) or 0
+        output_tokens = getattr(usage, "completion_tokens", 0) or 0
+
+        # Content filtering is enforced server-side and returns no message
+        # text — degrade the same way FoundryLLM does for a Claude refusal.
+        if choice.finish_reason == "content_filter":
+            return LLMResult(
+                text=(
+                    "I can't help with that request as phrased. "
+                    "Could a human colleague rephrase or narrow the ask? "
+                    "HANDOFF_TO_HUMAN"
+                ),
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+        return LLMResult(
+            text=choice.message.content or "",
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+        )
+
+
 async def build_llm_backend(settings: Settings, secret_provider) -> LLMBackend:
     """Factory selecting the backend from configuration."""
     if settings.llm_mode == "foundry":
@@ -137,4 +214,18 @@ async def build_llm_backend(settings: Settings, secret_provider) -> LLMBackend:
         if settings.foundry_auth != "entra":
             api_key = await secret_provider.get_secret(settings.foundry_api_key_secret)
         return FoundryLLM(settings, api_key=api_key)
+    if settings.llm_mode == "azure_openai":
+        api_key = None
+        if settings.azure_openai_auth != "entra":
+            api_key = await secret_provider.get_secret(
+                settings.azure_openai_api_key_secret
+            )
+        return AzureOpenAILLM(settings, api_key=api_key)
+    if settings.llm_mode != "mock":
+        logger.warning(
+            "CABINET_LLM_MODE=%r is not a recognized LLM backend (expected "
+            "'mock', 'foundry', or 'azure_openai') — no LLM connection is "
+            "configured; falling back to MockLLM.",
+            settings.llm_mode,
+        )
     return MockLLM()

@@ -5,6 +5,7 @@ import Sidebar from "./components/Sidebar";
 import RoomView from "./components/RoomView";
 import AdminPanel from "./components/AdminPanel";
 import type { RoomOut } from "./types";
+import { getActiveAccount, isEntraAuth } from "./auth";
 
 type View = { name: "empty" } | { name: "admin" } | { name: "room"; roomId: string };
 

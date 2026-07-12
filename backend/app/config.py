@@ -50,6 +50,27 @@ class Settings:
     foundry_model: str = field(
         default_factory=lambda: _env("CABINET_FOUNDRY_MODEL", "claude-opus-4-8")
     )
+
+    # --- LLM runtime (GPT on Microsoft Foundry, via the Azure OpenAI SDK) ---
+    azure_openai_endpoint: str = field(
+        default_factory=lambda: _env("CABINET_AZURE_OPENAI_ENDPOINT", "")
+    )
+    azure_openai_deployment: str = field(
+        default_factory=lambda: _env("CABINET_AZURE_OPENAI_DEPLOYMENT", "")
+    )
+    azure_openai_api_version: str = field(
+        default_factory=lambda: _env("CABINET_AZURE_OPENAI_API_VERSION", "2024-10-21")
+    )
+    # Set to "entra" to authenticate with Microsoft Entra ID instead of an API key.
+    azure_openai_auth: str = field(
+        default_factory=lambda: _env("CABINET_AZURE_OPENAI_AUTH", "api_key")
+    )
+    # Secret NAME in the secret provider (Key Vault in prod), not the key itself.
+    azure_openai_api_key_secret: str = field(
+        default_factory=lambda: _env(
+            "CABINET_AZURE_OPENAI_API_KEY_SECRET", "azure-openai-api-key"
+        )
+    )
     agent_max_tokens: int = field(
         default_factory=lambda: int(_env("CABINET_AGENT_MAX_TOKENS", "2048"))
     )

@@ -13,3 +13,6 @@ frontend/dist/
 .env
 .venv/
 smoke.db
+
+# Playwright MCP debug artifacts
+.playwright-mcp/
