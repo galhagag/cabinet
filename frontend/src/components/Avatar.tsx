@@ -6,14 +6,14 @@ const AGENT_META: Record<string, { initials: string; className: string }> = {
 };
 
 const PALETTE = [
-  "#e5534b",
-  "#d29922",
-  "#3fb950",
-  "#2f81f7",
-  "#b07af5",
-  "#eb6b9e",
-  "#21b8a6",
-  "#f28b4c",
+  "#223a75",
+  "#9b4090",
+  "#3888ff",
+  "#f5013e",
+  "#ff25ad",
+  "#6b3fa0",
+  "#c8860b",
+  "#1f9d55",
 ];
 
 function hash(str: string): number {

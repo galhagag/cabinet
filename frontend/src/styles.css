@@ -1,26 +1,26 @@
-/* Cabinet of Experts — dark professional fintech theme */
+/* Cabinet of Experts — ThetaRay light theme */
 
 :root {
-  --bg: #0c1017;
-  --bg-raised: #131a24;
-  --bg-panel: #171f2b;
-  --bg-input: #0f151e;
-  --border: #263242;
-  --border-strong: #34445a;
-  --text: #dbe4f0;
-  --text-muted: #8595aa;
-  --accent: #2f81f7;
-  --accent-hover: #4a94ff;
-  --data-expert: #21b8a6;      /* teal — Data Expert */
-  --data-expert-bg: #0f2a29;
-  --fce: #b07af5;              /* violet — Financial Crime Expert */
-  --fce-bg: #251a38;
-  --human-bg: #1d2836;
-  --danger: #e5534b;
-  --warn: #d29922;
-  --ok: #3fb950;
+  --bg: #f5f8fd;
+  --bg-raised: #ffffff;
+  --bg-panel: #ffffff;
+  --bg-input: #eef1f8;
+  --border: #dde3ee;
+  --border-strong: #c2cee2;
+  --text: #0f1b35;
+  --text-muted: #5c6b85;
+  --accent: #3888ff;
+  --accent-hover: #2569d9;
+  --data-expert: #223a75;      /* navy — Data Expert */
+  --data-expert-bg: #eaeef6;
+  --fce: #9b4090;              /* plum — Financial Crime Expert */
+  --fce-bg: #f7eef6;
+  --human-bg: #e7f0ff;
+  --danger: #f5013e;
+  --warn: #c8860b;
+  --ok: #1f9d55;
   --radius: 10px;
-  --shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  --shadow: 0 6px 20px rgba(15, 27, 53, 0.1);
   font-size: 15px;
 }
 
@@ -38,7 +38,7 @@ body,
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto,
+  font-family: "Open Sans", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto,
     "Helvetica Neue", Arial, sans-serif;
   line-height: 1.5;
 }
@@ -240,26 +240,26 @@ textarea {
 
 .badge-active {
   color: var(--ok);
-  background: rgba(63, 185, 80, 0.12);
-  border: 1px solid rgba(63, 185, 80, 0.4);
+  background: rgba(31, 157, 85, 0.12);
+  border: 1px solid rgba(31, 157, 85, 0.4);
 }
 
 .badge-paused {
   color: var(--warn);
-  background: rgba(210, 153, 34, 0.12);
-  border: 1px solid rgba(210, 153, 34, 0.45);
+  background: rgba(200, 134, 11, 0.12);
+  border: 1px solid rgba(200, 134, 11, 0.45);
 }
 
 .badge-pending {
   color: var(--accent);
-  background: rgba(47, 129, 247, 0.12);
-  border: 1px solid rgba(47, 129, 247, 0.4);
+  background: rgba(56, 136, 255, 0.12);
+  border: 1px solid rgba(56, 136, 255, 0.4);
 }
 
 .badge-linked {
   color: var(--data-expert);
-  background: rgba(33, 184, 166, 0.12);
-  border: 1px solid rgba(33, 184, 166, 0.4);
+  background: rgba(34, 58, 117, 0.12);
+  border: 1px solid rgba(34, 58, 117, 0.4);
 }
 
 .agent-chip {
@@ -314,12 +314,12 @@ textarea {
 
 .avatar-data_expert {
   background: var(--data-expert);
-  color: #06231f;
+  color: #eef3ff;
 }
 
 .avatar-fce {
   background: var(--fce);
-  color: #211433;
+  color: #fdf3fc;
 }
 
 .avatar-cluster {
@@ -502,7 +502,7 @@ textarea {
 
 .status-dot-paused {
   background: var(--warn);
-  box-shadow: 0 0 0 3px rgba(210, 153, 34, 0.2);
+  box-shadow: 0 0 0 3px rgba(200, 134, 11, 0.2);
 }
 
 /* ---- main pane / empty state ------------------------------------------------- */
@@ -646,8 +646,8 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  background: rgba(210, 153, 34, 0.1);
-  border: 1px solid rgba(210, 153, 34, 0.45);
+  background: rgba(200, 134, 11, 0.1);
+  border: 1px solid rgba(200, 134, 11, 0.45);
   border-radius: 8px;
   padding: 0.55rem 0.9rem;
 }
@@ -722,7 +722,7 @@ textarea {
 
 .msg-data_expert {
   background: var(--data-expert-bg);
-  border-color: rgba(33, 184, 166, 0.45);
+  border-color: rgba(34, 58, 117, 0.35);
 }
 
 .msg-data_expert .msg-sender {
@@ -731,7 +731,7 @@ textarea {
 
 .msg-fce {
   background: var(--fce-bg);
-  border-color: rgba(176, 122, 245, 0.45);
+  border-color: rgba(155, 64, 144, 0.35);
 }
 
 .msg-fce .msg-sender {
@@ -945,7 +945,7 @@ textarea {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(4, 8, 14, 0.7);
+  background: rgba(15, 27, 53, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1072,9 +1072,9 @@ textarea {
 
 /* ---- errors / toasts ------------------------------------------------------------------ */
 .inline-error {
-  background: rgba(229, 83, 75, 0.1);
-  border: 1px solid rgba(229, 83, 75, 0.5);
-  color: #ff8a80;
+  background: rgba(245, 1, 62, 0.08);
+  border: 1px solid rgba(245, 1, 62, 0.4);
+  color: #b3002c;
   border-radius: 8px;
   padding: 0.6rem 0.9rem;
   margin: 0.6rem 0;
@@ -1109,15 +1109,15 @@ textarea {
 }
 
 .toast-error {
-  background: #2a1414;
+  background: #fdecec;
   border-color: var(--danger);
-  color: #ffb3ad;
+  color: #8a1330;
 }
 
 .toast-info {
-  background: #12233a;
+  background: #eaf2ff;
   border-color: var(--accent);
-  color: #bcd8ff;
+  color: #1a4fa0;
 }
 
 .toast-close {
