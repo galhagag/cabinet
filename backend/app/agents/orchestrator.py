@@ -102,7 +102,7 @@ class Orchestrator:
         await self._broker.publish(
             room.id, {"type": "agent_thinking", "agent_key": agent_key}
         )
-        reply = await self._llm.complete(
+        result = await self._llm.complete(
             agent_key=agent_key, system_prompt=system_prompt, turns=turns
         )
         msg = Message(
@@ -110,7 +110,9 @@ class Orchestrator:
             sender_type="agent",
             sender_name=DISPLAY_NAMES[agent_key],
             agent_key=agent_key,
-            content=reply,
+            content=result.text,
+            input_tokens=result.input_tokens,
+            output_tokens=result.output_tokens,
         )
         session.add(msg)
         await session.commit()
@@ -140,7 +142,7 @@ class Orchestrator:
             await self._broker.publish(
                 room.id, {"type": "agent_thinking", "agent_key": speaker}
             )
-            reply = await self._llm.complete(
+            result = await self._llm.complete(
                 agent_key=speaker, system_prompt=system_prompt, turns=turns
             )
 
@@ -150,14 +152,16 @@ class Orchestrator:
                 sender_name=DISPLAY_NAMES[speaker],
                 agent_key=speaker,
                 cycle_number=cycle,
-                content=reply,
+                content=result.text,
+                input_tokens=result.input_tokens,
+                output_tokens=result.output_tokens,
             )
             session.add(msg)
             await session.commit()
             await self._broker.publish(room.id, self._msg_event(msg))
             created.append(msg)
 
-            if HANDOFF_TOKEN in reply:
+            if HANDOFF_TOKEN in result.text:
                 break
             speaker = FCE_KEY if speaker == DATA_EXPERT_KEY else DATA_EXPERT_KEY
 
@@ -303,6 +307,8 @@ class Orchestrator:
                 "mention_target": m.mention_target,
                 "cycle_number": m.cycle_number,
                 "content": m.content,
+                "input_tokens": m.input_tokens,
+                "output_tokens": m.output_tokens,
                 "created_at": m.created_at.isoformat() if m.created_at else None,
             },
         }
