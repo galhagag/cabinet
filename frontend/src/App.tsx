@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { getUserEmail, joinRoom, setUserEmail } from "./api";
-import { getActiveAccount, isEntraAuth, signIn, signOut } from "./auth";
+import { getUserEmail, joinRoom, listRooms, setUserEmail } from "./api";
 import { dismissToast, pushToast, subscribeToasts, toastError, type Toast } from "./toast";
-import RoomList from "./components/RoomList";
+import Sidebar from "./components/Sidebar";
 import RoomView from "./components/RoomView";
 import AdminPanel from "./components/AdminPanel";
+import type { RoomOut } from "./types";
 
-type View = { name: "lobby" } | { name: "admin" } | { name: "room"; roomId: string };
+type View = { name: "empty" } | { name: "admin" } | { name: "room"; roomId: string };
 
 function Toasts() {
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -99,8 +99,27 @@ function SignInScreen() {
 }
 
 export default function App() {
-  const [view, setView] = useState<View>({ name: "lobby" });
+  const [view, setView] = useState<View>({ name: "empty" });
   const [joining, setJoining] = useState(false);
+  const [rooms, setRooms] = useState<RoomOut[] | null>(null);
+  const [roomsError, setRoomsError] = useState<string | null>(null);
+
+  const refreshRooms = useCallback(() => {
+    listRooms()
+      .then((r) => {
+        setRooms(r);
+        setRoomsError(null);
+      })
+      .catch((err) => {
+        setRoomsError(err instanceof Error ? err.message : String(err));
+      });
+  }, []);
+
+  useEffect(refreshRooms, [refreshRooms]);
+
+  const patchRoom = useCallback((roomId: string, patch: Partial<RoomOut>) => {
+    setRooms((prev) => (prev ? prev.map((r) => (r.id === roomId ? { ...r, ...patch } : r)) : prev));
+  }, []);
 
   const openRoom = useCallback((roomId: string) => setView({ name: "room", roomId }), []);
 
@@ -117,6 +136,7 @@ export default function App() {
     joinRoom(token, identity)
       .then((room) => {
         pushToast("info", `Joined room "${room.customer_name}"`);
+        refreshRooms();
         setView({ name: "room", roomId: room.id });
       })
       .catch((err) => toastError(err, "Failed to join room"))
@@ -125,7 +145,7 @@ export default function App() {
         // Remove the token from the URL so refreshes do not re-join.
         window.history.replaceState({}, "", window.location.pathname);
       });
-  }, []);
+  }, [refreshRooms]);
 
   if (isEntraAuth && !getActiveAccount()) {
     return <SignInScreen />;
@@ -135,16 +155,16 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="topbar-left">
-          <span className="app-title" onClick={() => setView({ name: "lobby" })}>
+          <span className="app-title" onClick={() => setView({ name: "empty" })}>
             Cabinet of Experts <span className="app-subtitle">· ThetaRay Onboarding</span>
           </span>
         </div>
         <nav className="topbar-nav">
           <button
             className={`nav-link ${view.name !== "admin" ? "nav-active" : ""}`}
-            onClick={() => setView({ name: "lobby" })}
+            onClick={() => setView({ name: "empty" })}
           >
-            Lobby
+            Chats
           </button>
           <button
             className={`nav-link ${view.name === "admin" ? "nav-active" : ""}`}
@@ -158,14 +178,32 @@ export default function App() {
         </div>
       </header>
 
-      <main className="main">
-        {joining && <div className="joining-note">Joining room from invite link…</div>}
-        {view.name === "lobby" && <RoomList onOpenRoom={openRoom} />}
-        {view.name === "admin" && <AdminPanel />}
-        {view.name === "room" && (
-          <RoomView roomId={view.roomId} onBack={() => setView({ name: "lobby" })} />
-        )}
-      </main>
+      <div className={`app-body ${view.name !== "empty" ? "app-body-detail" : ""}`}>
+        <Sidebar
+          rooms={rooms}
+          error={roomsError}
+          selectedRoomId={view.name === "room" ? view.roomId : null}
+          onSelectRoom={openRoom}
+          onCreated={(room) => {
+            refreshRooms();
+            openRoom(room.id);
+          }}
+        />
+        <main className="main-pane">
+          {joining && <div className="joining-note">Joining room from invite link…</div>}
+          {!joining && view.name === "admin" && <AdminPanel />}
+          {!joining && view.name === "room" && (
+            <RoomView key={view.roomId} roomId={view.roomId} onClose={() => setView({ name: "empty" })} onActivity={patchRoom} />
+          )}
+          {!joining && view.name === "empty" && (
+            <div className="empty-state">
+              <div className="empty-state-icon">💬</div>
+              <h3>Select a Cabinet Room</h3>
+              <p className="muted">Pick a room from the list on the left, or start a new one.</p>
+            </div>
+          )}
+        </main>
+      </div>
 
       <Toasts />
     </div>

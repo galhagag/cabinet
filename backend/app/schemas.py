@@ -29,6 +29,14 @@ class RoomAgentOut(BaseModel):
     display_name: str
 
 
+class RoomLastMessageOut(BaseModel):
+    sender_type: str
+    sender_name: str
+    agent_key: str | None
+    content: str
+    created_at: datetime
+
+
 class RoomOut(BaseModel):
     id: str
     customer_name: str
@@ -38,6 +46,8 @@ class RoomOut(BaseModel):
     cycle_limit: int
     created_at: datetime
     agents: list[RoomAgentOut] = []
+    member_count: int = 0
+    last_message: RoomLastMessageOut | None = None
 
 
 class RoomMemberOut(BaseModel):
@@ -73,6 +83,8 @@ class MessageOut(BaseModel):
     mention_target: str | None
     cycle_number: int | None
     content: str
+    input_tokens: int | None = None
+    output_tokens: int | None = None
     created_at: datetime
 
 

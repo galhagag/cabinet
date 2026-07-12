@@ -24,10 +24,17 @@ class ChatTurn:
     content: str
 
 
+@dataclass(frozen=True)
+class LLMResult:
+    text: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+
 class LLMBackend(Protocol):
     async def complete(
         self, *, agent_key: str, system_prompt: str, turns: list[ChatTurn]
-    ) -> str: ...
+    ) -> LLMResult: ...
 
 
 class MockLLM:
@@ -53,13 +60,20 @@ class MockLLM:
 
     async def complete(
         self, *, agent_key: str, system_prompt: str, turns: list[ChatTurn]
-    ) -> str:
+    ) -> LLMResult:
         last = turns[-1].content if turns else ""
         flavor = self._FLAVOR.get(agent_key, "Acknowledged.")
         reply = f"[{agent_key}·mock] {flavor} (re: {last[:80]})"
         if "wrap up" in last.lower():
             reply += " HANDOFF_TO_HUMAN"
-        return reply
+        # ~4 chars/token — a rough but deterministic stand-in for real usage,
+        # good enough to exercise the token-usage UI in dev/CI.
+        prompt_chars = len(system_prompt) + sum(len(t.content) for t in turns)
+        return LLMResult(
+            text=reply,
+            input_tokens=max(1, prompt_chars // 4),
+            output_tokens=max(1, len(reply) // 4),
+        )
 
 
 class FoundryLLM:
@@ -89,23 +103,31 @@ class FoundryLLM:
 
     async def complete(
         self, *, agent_key: str, system_prompt: str, turns: list[ChatTurn]
-    ) -> str:
+    ) -> LLMResult:
         response = await self._client.messages.create(
             model=self._settings.foundry_model,
             max_tokens=self._settings.agent_max_tokens,
             system=system_prompt,
             messages=[{"role": t.role, "content": t.content} for t in turns],
         )
+        input_tokens = getattr(response.usage, "input_tokens", 0) or 0
+        output_tokens = getattr(response.usage, "output_tokens", 0) or 0
+
         # Refusal fallbacks aren't server-side on Foundry — degrade politely.
         if response.stop_reason == "refusal":
-            return (
-                "I can't help with that request as phrased. "
-                "Could a human colleague rephrase or narrow the ask? "
-                "HANDOFF_TO_HUMAN"
+            return LLMResult(
+                text=(
+                    "I can't help with that request as phrased. "
+                    "Could a human colleague rephrase or narrow the ask? "
+                    "HANDOFF_TO_HUMAN"
+                ),
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
             )
-        return "".join(
+        text = "".join(
             block.text for block in response.content if block.type == "text"
         )
+        return LLMResult(text=text, input_tokens=input_tokens, output_tokens=output_tokens)
 
 
 async def build_llm_backend(settings: Settings, secret_provider) -> LLMBackend:

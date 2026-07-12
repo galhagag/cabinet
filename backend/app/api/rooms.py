@@ -4,21 +4,22 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import aliased, selectinload
 
 from ..agents.orchestrator import Orchestrator
 from ..agents.profiles import AGENT_KEYS, DISPLAY_NAMES
 from ..config import get_settings
 from ..db.base import get_session
-from ..db.models import AuditLog, Room, RoomAgent, RoomInvite, RoomMember
+from ..db.models import AuditLog, Message, Room, RoomAgent, RoomInvite, RoomMember
 from ..schemas import (
     CompiledPromptOut,
     InviteCreateOut,
     JoinRequest,
     RoomAgentOut,
     RoomCreate,
+    RoomLastMessageOut,
     RoomMemberOut,
     RoomOut,
 )
@@ -27,7 +28,9 @@ from .deps import get_current_user_email, get_orchestrator, require_room_member
 router = APIRouter(prefix="/api/rooms", tags=["rooms"])
 
 
-def _room_out(room: Room) -> RoomOut:
+def _room_out(
+    room: Room, *, last_message: Message | None = None, member_count: int = 0
+) -> RoomOut:
     return RoomOut(
         id=room.id,
         customer_name=room.customer_name,
@@ -40,6 +43,18 @@ def _room_out(room: Room) -> RoomOut:
             RoomAgentOut(agent_key=a.agent_key, display_name=a.display_name)
             for a in room.agents
         ],
+        member_count=member_count,
+        last_message=(
+            RoomLastMessageOut(
+                sender_type=last_message.sender_type,
+                sender_name=last_message.sender_name,
+                agent_key=last_message.agent_key,
+                content=last_message.content,
+                created_at=last_message.created_at,
+            )
+            if last_message is not None
+            else None
+        ),
     )
 
 
@@ -48,6 +63,43 @@ async def _get_room_with_agents(session: AsyncSession, room_id: str) -> Room:
     if room is None:
         raise HTTPException(status_code=404, detail="room not found")
     return room
+
+
+async def _last_messages_by_room(
+    session: AsyncSession, room_ids: list[str]
+) -> dict[str, Message]:
+    """Latest message per room — sidebar preview, one query for every room."""
+    if not room_ids:
+        return {}
+    ranked = (
+        select(
+            Message,
+            func.row_number()
+            .over(
+                partition_by=Message.room_id,
+                order_by=(Message.seq.desc(), Message.id.desc()),
+            )
+            .label("rn"),
+        )
+        .where(Message.room_id.in_(room_ids))
+        .subquery()
+    )
+    latest = aliased(Message, ranked)
+    result = await session.execute(select(latest).where(ranked.c.rn == 1))
+    return {m.room_id: m for m in result.scalars().all()}
+
+
+async def _member_counts_by_room(
+    session: AsyncSession, room_ids: list[str]
+) -> dict[str, int]:
+    if not room_ids:
+        return {}
+    result = await session.execute(
+        select(RoomMember.room_id, func.count(RoomMember.id))
+        .where(RoomMember.room_id.in_(room_ids))
+        .group_by(RoomMember.room_id)
+    )
+    return dict(result.all())
 
 
 @router.post("", status_code=201, response_model=RoomOut)
@@ -90,7 +142,7 @@ async def create_room(
         )
     )
     await session.commit()
-    return _room_out(room)
+    return _room_out(room, member_count=len(room.members))
 
 
 @router.get("", response_model=list[RoomOut])
@@ -98,7 +150,18 @@ async def list_rooms(session: AsyncSession = Depends(get_session)) -> list[RoomO
     result = await session.execute(
         select(Room).options(selectinload(Room.agents)).order_by(Room.created_at)
     )
-    return [_room_out(room) for room in result.scalars().all()]
+    rooms = list(result.scalars().all())
+    room_ids = [r.id for r in rooms]
+    last_messages = await _last_messages_by_room(session, room_ids)
+    member_counts = await _member_counts_by_room(session, room_ids)
+    return [
+        _room_out(
+            room,
+            last_message=last_messages.get(room.id),
+            member_count=member_counts.get(room.id, 0),
+        )
+        for room in rooms
+    ]
 
 
 @router.post("/join", response_model=RoomOut)
@@ -142,7 +205,13 @@ async def join_room(
             )
         )
         await session.commit()
-    return _room_out(room)
+    last_messages = await _last_messages_by_room(session, [room.id])
+    member_counts = await _member_counts_by_room(session, [room.id])
+    return _room_out(
+        room,
+        last_message=last_messages.get(room.id),
+        member_count=member_counts.get(room.id, 0),
+    )
 
 
 @router.get("/{room_id}", response_model=RoomOut)
@@ -151,7 +220,14 @@ async def get_room(
     session: AsyncSession = Depends(get_session),
     _member: str = Depends(require_room_member),
 ) -> RoomOut:
-    return _room_out(await _get_room_with_agents(session, room_id))
+    room = await _get_room_with_agents(session, room_id)
+    last_messages = await _last_messages_by_room(session, [room.id])
+    member_counts = await _member_counts_by_room(session, [room.id])
+    return _room_out(
+        room,
+        last_message=last_messages.get(room.id),
+        member_count=member_counts.get(room.id, 0),
+    )
 
 
 @router.get("/{room_id}/members", response_model=list[RoomMemberOut])
