@@ -18,6 +18,7 @@ from .api import admin, gdrive, messages, rooms, skills, ws
 from .config import get_settings
 from .db.base import get_sessionmaker, init_db
 from .services.blob_storage import build_blob_provider
+from .services.entra_auth import EntraTokenValidator
 from .services.google_oauth import GoogleOAuthService
 from .services.realtime import build_realtime
 from .services.secrets import build_secret_provider
@@ -45,6 +46,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.orchestrator = Orchestrator(settings, llm, broker)
     app.state.skills_service = SkillsService(blob_provider)
     app.state.google_oauth = GoogleOAuthService(settings, secret_provider)
+    app.state.entra_validator = (
+        EntraTokenValidator(settings) if settings.auth_mode == "entra" else None
+    )
     yield
 
 

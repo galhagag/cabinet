@@ -70,6 +70,34 @@ function UserEmailEditor() {
   );
 }
 
+function EntraAccountBadge() {
+  const account = getActiveAccount();
+  if (!account) return null;
+  return (
+    <span className="user-email-edit">
+      <span className="user-email" title={account.username}>
+        {account.name || account.username}
+      </span>
+      <button className="btn btn-small" onClick={() => void signOut()}>
+        Sign out
+      </button>
+    </span>
+  );
+}
+
+function SignInScreen() {
+  return (
+    <div className="app">
+      <div className="joining-note">
+        <p>Sign in with your Microsoft account to continue.</p>
+        <button className="btn" onClick={() => void signIn()}>
+          Sign in with Microsoft
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [view, setView] = useState<View>({ name: "empty" });
   const [joining, setJoining] = useState(false);
@@ -97,11 +125,15 @@ export default function App() {
 
   // Handle ?token= invite links on load.
   useEffect(() => {
+    if (isEntraAuth && !getActiveAccount()) return;
     const params = new URLSearchParams(window.location.search);
     const token = params.get("token");
     if (!token) return;
     setJoining(true);
-    joinRoom(token, getUserEmail())
+    const identity = isEntraAuth
+      ? getActiveAccount()?.username ?? "unknown"
+      : getUserEmail();
+    joinRoom(token, identity)
       .then((room) => {
         pushToast("info", `Joined room "${room.customer_name}"`);
         refreshRooms();
@@ -114,6 +146,10 @@ export default function App() {
         window.history.replaceState({}, "", window.location.pathname);
       });
   }, [refreshRooms]);
+
+  if (isEntraAuth && !getActiveAccount()) {
+    return <SignInScreen />;
+  }
 
   return (
     <div className="app">
@@ -138,7 +174,7 @@ export default function App() {
           </button>
         </nav>
         <div className="topbar-right">
-          <UserEmailEditor />
+          {isEntraAuth ? <EntraAccountBadge /> : <UserEmailEditor />}
         </div>
       </header>
 

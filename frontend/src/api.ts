@@ -1,4 +1,5 @@
 // Typed REST client for the Cabinet backend.
+import { getAccessToken, isEntraAuth } from "./auth";
 import type {
   AgentConfigOut,
   CompiledPromptOut,
@@ -37,7 +38,11 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
-  headers.set("X-User-Email", getUserEmail());
+  if (isEntraAuth) {
+    headers.set("Authorization", `Bearer ${await getAccessToken()}`);
+  } else {
+    headers.set("X-User-Email", getUserEmail());
+  }
   if (init.body !== undefined && !(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }

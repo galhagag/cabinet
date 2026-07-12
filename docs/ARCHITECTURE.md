@@ -77,6 +77,7 @@ no code changes:
 | `CABINET_BLOB_PROVIDER` | `local` | `azure_blob` (+ connection secret from Key Vault) |
 | `CABINET_REALTIME_PROVIDER` | `inprocess` | `azure_webpubsub` |
 | `CABINET_DATABASE_URL` | `sqlite+aiosqlite:///...` | `postgresql+asyncpg://...` (from Key Vault) |
+| `CABINET_AUTH_MODE` | `dev` (trusted `X-User-Email` header) | `entra` (Microsoft Entra ID JWT, verified against tenant JWKS) |
 
 `infra/.env.example` documents every variable with the exact secret names expected
 in Key Vault (`google-oauth-client-id`, `google-oauth-client-secret`,
@@ -359,3 +360,38 @@ Foundry (Claude Messages API) readiness — before completion is declared.
 - All mutating endpoints write `audit_log` rows (regulated-industry traceability).
 - WebSocket join requires room membership (email header in dev; Entra ID JWT in prod
   — the dependency is isolated in `api/deps.py` for a one-line swap).
+
+### 9.1 Authentication (`CABINET_AUTH_MODE`)
+
+- **`dev`** (default, dev/test only): caller identity comes straight from the
+  `X-User-Email` header, trusted with zero verification. The frontend lets a
+  user type any email into a text box. Never set in production.
+- **`entra`**: caller identity comes from a Microsoft Entra ID (Azure AD v2.0)
+  access token, presented as `Authorization: Bearer <token>` on HTTP requests
+  and as an `?access_token=` query parameter on the WebSocket handshake
+  (browsers cannot set custom headers on a WS upgrade). `EntraTokenValidator`
+  (`backend/app/services/entra_auth.py`) verifies, per request:
+  - **Signature** — RS256 against the tenant's JWKS
+    (`https://login.microsoftonline.com/{tenant}/discovery/v2.0/keys`),
+    fetched lazily and refetched on an unrecognized `kid` (handles Entra's
+    routine key rotation) — no shared secret ever reaches the backend.
+  - **Issuer** — `https://login.microsoftonline.com/{tenant}/v2.0`.
+  - **Audience** — the API app registration's client ID
+    (`CABINET_ENTRA_CLIENT_ID`), distinct from the frontend SPA's client ID.
+  - **Expiry** — standard `exp`/`iat` validation.
+  - The caller's email is read from the token's verified
+    `preferred_username` / `email` / `upn` claim — never from a client-
+    supplied header.
+  - Required config: `CABINET_ENTRA_TENANT_ID`, `CABINET_ENTRA_CLIENT_ID`.
+  - Frontend: `frontend/src/auth.ts` wraps `@azure/msal-browser`
+    (`PublicClientApplication`) for the redirect sign-in flow and silent
+    token acquisition/refresh; gated by `VITE_AUTH_MODE=entra` plus
+    `VITE_ENTRA_TENANT_ID` / `VITE_ENTRA_CLIENT_ID` / `VITE_ENTRA_API_SCOPE`.
+  - `get_current_user_email` (`api/deps.py`) is the single dependency every
+    router uses for identity — everything downstream (room membership,
+    admin allowlist, audit log `actor`) is unchanged between modes.
+  - Tests: `backend/tests/test_entra_auth.py` exercises the full validation
+    path (good token, expired, wrong audience, wrong issuer, tampered
+    signature, unknown `kid`) against a self-signed RSA keypair over
+    `httpx.MockTransport` — no real Azure AD tenant needed to verify the
+    code path; only your real tenant/client IDs are needed to go live.
