@@ -16,10 +16,12 @@ Owns the two behaviors at the heart of the Cabinet:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
+from collections import defaultdict
 from typing import Protocol
 
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import Settings
@@ -47,6 +49,28 @@ class Orchestrator:
         self._settings = settings
         self._llm = llm
         self._broker = broker
+        self._room_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+
+    def room_lock(self, room_id: str) -> asyncio.Lock:
+        """One lock per room, serializing the entire human-message→loop and
+        resume→loop critical sections so two concurrent entry points into the
+        same room's autonomous loop can never both be mid-flight (Design 02
+        Stage 2 / H5). In-process only; on a single replica this is
+        sufficient. Multi-replica also acquires a Postgres advisory lock (see
+        `_acquire_replica_lock`) as defense in depth.
+        """
+        return self._room_locks[room_id]
+
+    async def _acquire_replica_lock(self, session: AsyncSession, room_id: str) -> None:
+        """No-op on SQLite (tests); on Postgres, holds a transaction-scoped
+        advisory lock so only one replica drives a given room's loop at a
+        time, even though each replica's in-process lock only protects
+        against races within that replica."""
+        if session.bind is not None and session.bind.dialect.name == "postgresql":
+            await session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:room_id))"),
+                {"room_id": room_id},
+            )
 
     # ------------------------------------------------------------------
     # Entry point: a human posted a message
@@ -59,40 +83,45 @@ class Orchestrator:
         Returns every message created during this interaction (human + agent),
         in order.
         """
-        mention = parse_mention(content)
+        async with self.room_lock(room.id):
+            await self._acquire_replica_lock(session, room.id)
+            mention = parse_mention(content)
 
-        human_msg = Message(
-            room_id=room.id,
-            sender_type="human",
-            sender_name=sender_name,
-            mention_target=mention,
-            content=content,
-        )
-        session.add(human_msg)
-
-        # Human input always resets the loop budget and unpauses the room.
-        # Written as an explicit UPDATE so concurrent requests contend on the
-        # row rather than clobbering each other through stale ORM state.
-        was_paused = room.status == PAUSED
-        await session.execute(
-            update(Room)
-            .where(Room.id == room.id)
-            .values(cycles_used=0, status=ACTIVE)
-        )
-        await session.commit()
-        await session.refresh(room)
-        if was_paused:
-            await self._broker.publish(
-                room.id, {"type": "room_resumed", "room_id": room.id}
+            human_msg = Message(
+                room_id=room.id,
+                sender_type="human",
+                sender_name=sender_name,
+                mention_target=mention,
+                content=content,
             )
-        await self._broker.publish(room.id, self._msg_event(human_msg))
+            session.add(human_msg)
 
-        created = [human_msg]
-        if mention:
-            created += await self._run_mention_reply(session, room, mention)
-        else:
-            created += await self.run_autonomous_loop(session, room)
-        return created
+            # Freshly read under the lock: no concurrent handle_human_message
+            # or resume_room can be mid-transition on this room right now, so
+            # this reflects the true committed state (fixes the duplicate
+            # room_resumed Low — previously read from a pre-UPDATE ORM object
+            # that could already be stale under concurrency).
+            await session.refresh(room)
+            was_paused = room.status == PAUSED
+            await session.execute(
+                update(Room)
+                .where(Room.id == room.id)
+                .values(cycles_used=0, status=ACTIVE)
+            )
+            await session.commit()
+            await session.refresh(room)
+            if was_paused:
+                await self._broker.publish(
+                    room.id, {"type": "room_resumed", "room_id": room.id}
+                )
+            await self._broker.publish(room.id, self._msg_event(human_msg))
+
+            created = [human_msg]
+            if mention:
+                created += await self._run_mention_reply(session, room, mention)
+            else:
+                created += await self.run_autonomous_loop(session, room)
+            return created
 
     # ------------------------------------------------------------------
     # Mention routing: exactly one targeted reply
