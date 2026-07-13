@@ -1,6 +1,20 @@
 # Design 05 — Persistence, Migrations & Schema Integrity
 
 **Status:** Proposed
+
+**Phase 2 progress:** H13 (Alembic scaffolding + baseline migration,
+`create_all` gated to `CABINET_ENV=dev` only, race-safe upsert seed), M16
+(room-create IntegrityError → 409), M17 (Message FK changed to
+`ondelete=RESTRICT`, `AuditLog.room_id` given a real FK + index,
+`Room.deleted_at` groundwork), and the CHECK-constraint/index/max_length Lows
+shipped in `fix/migrations-schema-integrity-05`. **Explicitly deferred: M7**
+(DB-assigned monotonic `seq`) — needs verification against a real Postgres
+instance this environment doesn't have; `seq` still defaults to
+`time.time_ns`. The `TZDateTime` decorator and enum-as-native-type Lows were
+also not done (the CHECK-constraint approach covers the "typo becomes a
+write error" goal without the larger app-wide refactor a full enum type
+would need).
+
 **Addresses:** H13 (no migrations; `create_all` on startup; seed race), M7
 (client-side `time.time_ns` ordering key), M16 (room-create check-then-insert →
 500 not 409), M17 (cascade delete destroys the audit transcript; `AuditLog`
