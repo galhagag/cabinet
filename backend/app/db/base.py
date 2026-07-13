@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import AsyncIterator
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -38,6 +39,19 @@ def get_engine() -> AsyncEngine:
             # lock instead of failing with "database is locked".
             kwargs["connect_args"] = {"timeout": 30}
         _engine = create_async_engine(url, **kwargs)
+        if url.startswith("sqlite"):
+            # SQLite ignores FK constraints (CASCADE/RESTRICT/SET NULL) per
+            # connection unless PRAGMA foreign_keys=ON is set — off by
+            # default. Without this, the ondelete= policies in models.py
+            # (e.g. Message.room_id RESTRICT protecting the audit
+            # transcript) are silently unenforced in dev/tests and only
+            # actually take effect against Postgres in production.
+            @event.listens_for(_engine.sync_engine, "connect")
+            def _enable_sqlite_fk(dbapi_connection, connection_record):
+                cursor = dbapi_connection.cursor()
+                cursor.execute("PRAGMA foreign_keys=ON")
+                cursor.close()
+
         _sessionmaker = async_sessionmaker(_engine, expire_on_commit=False)
     return _engine
 
