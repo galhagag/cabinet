@@ -74,30 +74,31 @@ async def resume_room(
 ) -> PostMessageResult:
     room = await _get_room(session, room_id)
 
-    # Atomic paused→active transition: exactly one of any number of
-    # concurrent resume clicks wins the fresh budget; the rest get 409.
-    result = await session.execute(
-        update(Room)
-        .where(Room.id == room_id, Room.status == PAUSED)
-        .values(status=ACTIVE, cycles_used=0)
-        .returning(Room.id)
-    )
-    claimed = result.scalar_one_or_none()
-    await session.commit()
-    if claimed is None:
-        raise HTTPException(
-            status_code=409, detail="room is not paused awaiting a human"
+    async with orchestrator.room_lock(room_id):
+        # Atomic paused→active transition: exactly one of any number of
+        # concurrent resume clicks wins the fresh budget; the rest get 409.
+        result = await session.execute(
+            update(Room)
+            .where(Room.id == room_id, Room.status == PAUSED)
+            .values(status=ACTIVE, cycles_used=0)
+            .returning(Room.id)
         )
-    await session.refresh(room)
-    await request.app.state.broker.publish(
-        room_id, {"type": "room_resumed", "room_id": room_id}
-    )
+        claimed = result.scalar_one_or_none()
+        await session.commit()
+        if claimed is None:
+            raise HTTPException(
+                status_code=409, detail="room is not paused awaiting a human"
+            )
+        await session.refresh(room)
+        await request.app.state.broker.publish(
+            room_id, {"type": "room_resumed", "room_id": room_id}
+        )
 
-    created = await orchestrator.run_autonomous_loop(session, room)
-    await session.refresh(room)
-    return PostMessageResult(
-        messages=_message_out(created),
-        room_status=room.status,
-        cycles_used=room.cycles_used,
-        cycle_limit=room.cycle_limit,
-    )
+        created = await orchestrator.run_autonomous_loop(session, room)
+        await session.refresh(room)
+        return PostMessageResult(
+            messages=_message_out(created),
+            room_status=room.status,
+            cycles_used=room.cycles_used,
+            cycle_limit=room.cycle_limit,
+        )

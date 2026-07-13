@@ -8,8 +8,9 @@ from .conftest import make_room
 # ---------------------------------------------------------------------------
 # Finding 1 (critical): budget must hold under concurrent requests
 # ---------------------------------------------------------------------------
-def test_concurrent_posts_cannot_exceed_budget(client):
-    """Two overlapping human posts share ONE 6-cycle budget (was 12)."""
+def test_concurrent_posts_are_serialized_per_room(client):
+    """Two overlapping human posts to the same room run as two clean,
+    non-interleaved 6-cycle rounds instead of racing (Design 02 Stage 2 / H5)."""
     room = make_room(client, "RaceBank")
     app = client.app
     orchestrator = app.state.orchestrator
@@ -31,15 +32,48 @@ def test_concurrent_posts_cannot_exceed_budget(client):
 
     messages = client.get(f"/api/rooms/{room['id']}/messages").json()
     agent_msgs = [m for m in messages if m["sender_type"] == "agent"]
-    # The last human message resets the counter to 0 mid-race; both loops then
-    # drain the SAME shared budget, so total agent turns is bounded by
-    # cycle_limit per reset — never 2 × cycle_limit.
-    assert len(agent_msgs) <= 2 * 6 - 5, (
-        f"budget raced: {len(agent_msgs)} agent turns"
-    )
+    assert len(agent_msgs) == 12, "two full, non-interleaved 6-turn rounds"
+    first_round, second_round = agent_msgs[:6], agent_msgs[6:]
+    for round_msgs in (first_round, second_round):
+        assert [m["cycle_number"] for m in round_msgs] == [1, 2, 3, 4, 5, 6]
+        speakers = [m["agent_key"] for m in round_msgs]
+        assert all(a != b for a, b in zip(speakers, speakers[1:]))
+
+    status = client.get(f"/api/rooms/{room['id']}").json()
+    assert status["cycles_used"] == 6
+    assert status["status"] == "paused_awaiting_human"
+
+
+def test_concurrent_resume_and_new_message_are_serialized(client):
+    room = make_room(client, "ResumeSerialBank")
+    client.post(f"/api/rooms/{room['id']}/messages", json={"content": "go"})  # pauses it
+
+    import httpx
+
+    async def race():
+        transport = httpx.ASGITransport(app=client.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+            return await asyncio.gather(
+                ac.post(f"/api/rooms/{room['id']}/resume", timeout=60),
+                ac.post(
+                    f"/api/rooms/{room['id']}/messages",
+                    json={"content": "meanwhile a human posts"},
+                    timeout=60,
+                ),
+            )
+
+    first, second = client.portal.call(race)
+    for resp in (first, second):
+        assert resp.status_code == 200, resp.text
+
     status = client.get(f"/api/rooms/{room['id']}").json()
     assert status["cycles_used"] <= status["cycle_limit"]
-    assert status["status"] == "paused_awaiting_human"
+    messages = client.get(f"/api/rooms/{room['id']}/messages").json()
+    agent_msgs = [m for m in messages if m["sender_type"] == "agent"]
+    # No matter which acquires the lock first, both run to completion
+    # serially, each a clean 6-turn round, never interleaved: the initial
+    # "go" round (6) plus two more full rounds triggered by the race (6 + 6).
+    assert len(agent_msgs) == 18
 
 
 def test_concurrent_resumes_grant_single_budget(client):
