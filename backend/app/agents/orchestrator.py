@@ -105,9 +105,13 @@ class Orchestrator:
         await self._broker.publish(
             room.id, {"type": "agent_thinking", "agent_key": agent_key}
         )
-        result = await self._llm.complete(
-            agent_key=agent_key, system_prompt=system_prompt, turns=turns
-        )
+        try:
+            result = await self._llm.complete(
+                agent_key=agent_key, system_prompt=system_prompt, turns=turns
+            )
+        except LLMError as exc:
+            fail_msg = await self._fail_turn(session, room, agent_key, exc)
+            return [fail_msg]
         msg = Message(
             room_id=room.id,
             sender_type="agent",

@@ -59,3 +59,23 @@ def test_llm_failure_on_first_turn_still_pauses_and_resumes(client):
     assert [m["sender_type"] for m in body["messages"]] == ["human", "system"]
     assert body["room_status"] == "paused_awaiting_human"
     assert client.post(f"/api/rooms/{room['id']}/resume").status_code == 200
+
+
+def test_llm_failure_on_mention_reply_pauses_room_and_allows_resume(client):
+    """_run_mention_reply had the same unguarded `self._llm.complete(...)` call
+    as the autonomous loop, but was not covered by the Stage 1 fix — an
+    @-mention that hit a flaky LLM would 500 the request instead of pausing
+    the room. This must degrade exactly like the autonomous-loop path.
+    """
+    room = make_room(client, "MentionFlakyBank")
+    client.app.state.orchestrator._llm = _FlakyLLM(ok_calls=0)
+
+    resp = client.post(
+        f"/api/rooms/{room['id']}/messages",
+        json={"content": "@data_expert please map the schema"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert [m["sender_type"] for m in body["messages"]] == ["human", "system"]
+    assert body["room_status"] == "paused_awaiting_human"
+    assert client.post(f"/api/rooms/{room['id']}/resume").status_code == 200
