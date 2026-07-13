@@ -16,3 +16,6 @@ smoke.db
 
 # Playwright MCP debug artifacts
 .playwright-mcp/
+
+# Git worktrees
+.worktrees/
