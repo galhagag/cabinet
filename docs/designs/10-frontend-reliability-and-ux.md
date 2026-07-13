@@ -1,6 +1,11 @@
 # Design 10 — Frontend Reliability & UX
 
 **Status:** Proposed
+
+**Phase 1 progress:** C1 (missing `signIn`/`signOut` imports) shipped in
+`fix/frontend-build-signin-signout-10`. Remaining: H7–H9, M10–M14, and the
+frontend Lows — not yet started.
+
 **Addresses:** C1 (missing `signIn`/`signOut` imports → build broken), H7 (REST
 load replaces state, racing WS → dropped messages), H8 (reconnect never
 resyncs), H9 (`initAuth().then` no `.catch` → blank page), M10 (own-message
