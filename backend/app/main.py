@@ -28,6 +28,7 @@ from .services.skills import SkillsService
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
+    settings.validate_for_environment()
 
     await init_db()
     async with get_sessionmaker()() as session:
@@ -56,12 +57,11 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
+    origins = [o.strip() for o in settings.allowed_origins.split(",") if o.strip()]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # dev; production restricts to the frontend origin
-        # Wildcard origins + credentials is an invalid combination browsers
-        # reject; the dev identity header is not a credential, so keep False.
-        allow_credentials=False,
+        allow_origins=origins,
+        allow_credentials=settings.auth_mode == "entra" and origins != ["*"],
         allow_methods=["*"],
         allow_headers=["*"],
     )
