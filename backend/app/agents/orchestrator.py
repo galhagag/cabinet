@@ -25,7 +25,7 @@ from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import Settings
-from ..db.models import AgentGlobalConfig, AgentSkill, Message, Room
+from ..db.models import AgentGlobalConfig, AgentSkill, Message, Room, RoomSkillOverride
 from .foundry_client import ChatTurn, LLMBackend, LLMError
 from .profiles import AGENT_KEYS, DATA_EXPERT_KEY, DISPLAY_NAMES, FCE_KEY
 from .prompt_compiler import SkillSection, compile_system_prompt, parse_mention
@@ -308,9 +308,19 @@ class Orchestrator:
             )
             .order_by(AgentSkill.created_at)
         )
+        all_skills = result.scalars().all()
+
+        # Fetch disabled skill IDs for this room
+        overrides = await session.execute(
+            select(RoomSkillOverride.skill_id).where(RoomSkillOverride.room_id == room.id)
+        )
+        disabled_ids = set(overrides.scalars().all())
+
+        # Filter out disabled skills
         skills = [
             SkillSection(name=s.skill_name, content=s.content_text)
-            for s in result.scalars().all()
+            for s in all_skills
+            if s.id not in disabled_ids
         ]
         return compile_system_prompt(
             baseline=config.system_prompt,

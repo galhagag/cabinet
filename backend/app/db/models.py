@@ -216,6 +216,25 @@ class AgentSkill(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class RoomSkillOverride(Base):
+    """Room-scoped disable toggle for a skill (global or room-owned).
+
+    Row presence means "disabled in this room" — this keeps a global skill's
+    on/off state scoped to the room where a member toggled it, since
+    AgentSkill.room_id is NULL (shared) for global skills.
+    """
+
+    __tablename__ = "room_skill_overrides"
+
+    room_id: Mapped[str] = mapped_column(
+        ForeignKey("rooms.id", ondelete="CASCADE"), primary_key=True
+    )
+    skill_id: Mapped[str] = mapped_column(
+        ForeignKey("agent_skills.id", ondelete="CASCADE"), primary_key=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class AuditLog(Base):
     __tablename__ = "audit_log"
 
