@@ -197,9 +197,10 @@ Deliberately **not** given a tab, kept as roadmap notes only:
 - API tests — instructions PUT (member can, non-member 403, empty string
   accepted); skills toggle PUT (upsert/delete override, `GET` reflects
   `enabled`); usage GET aggregation correctness.
-- Frontend — component tests for the new tab switcher, agent list/detail
-  navigation, and the skills toggle UI, following existing component test
-  conventions.
+- Frontend — no automated test runner exists in this repo yet (no vitest/RTL,
+  no test script in `frontend/package.json`); verified instead via
+  `npx tsc --noEmit` plus manual exercise of the tab switcher, agent
+  list/detail navigation, and skills toggle UI in the browser.
 
 ## Sources consulted
 
