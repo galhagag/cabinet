@@ -594,53 +594,7 @@ textarea {
   flex-wrap: wrap;
 }
 
-/* ---- loop budget banner ---------------------------------------------------- */
-.loop-banner {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 0.6rem 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-}
-
-.loop-banner-paused {
-  border-color: var(--warn);
-  box-shadow: 0 0 0 1px rgba(210, 153, 34, 0.35);
-}
-
-.loop-meter {
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-}
-
-.loop-meter-label {
-  font-size: 0.82rem;
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
-.loop-meter-track {
-  flex: 1;
-  height: 8px;
-  background: var(--bg-input);
-  border-radius: 999px;
-  overflow: hidden;
-}
-
-.loop-meter-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 999px;
-  transition: width 0.3s ease;
-}
-
-.loop-meter-full {
-  background: var(--warn);
-}
-
+/* ---- paused banner ---------------------------------------------------- */
 .paused-alert {
   display: flex;
   align-items: center;
