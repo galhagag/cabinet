@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getRoom, listMembers, listMessages, postMessage, resumeRoom } from "../api";
+import { getRoom, getUserEmail, listMembers, listMessages, postMessage, resumeRoom } from "../api";
 import type { MessageOut, RoomMemberOut, RoomOut, RoomWsEvent } from "../types";
 import { RoomSocket } from "../ws";
 import { pushToast, toastError } from "../toast";
@@ -92,10 +92,12 @@ export default function RoomView({
           pushToast("info", `Skill added${event.skill_name ? `: ${event.skill_name}` : ""}`);
           break;
         case "agent_instructions_updated":
-          pushToast(
-            "info",
-            `Instructions updated for ${agentDisplayName(roomRef.current, event.agent_key)}`,
-          );
+          if (event.actor !== getUserEmail()) {
+            pushToast(
+              "info",
+              `Instructions updated for ${agentDisplayName(roomRef.current, event.agent_key)}`,
+            );
+          }
           setInstructionsRefreshSignal((n) => n + 1);
           break;
         case "agent_skill_toggled":

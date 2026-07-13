@@ -200,6 +200,7 @@ export interface WsAgentInstructionsUpdated {
   type: "agent_instructions_updated";
   room_id: string;
   agent_key: string;
+  actor: string;
 }
 
 export interface WsAgentSkillToggled {
