@@ -54,4 +54,6 @@ async def room_stream(websocket: WebSocket, room_id: str) -> None:
             if text == "ping":  # lightweight client keepalive
                 await websocket.send_json({"type": "pong"})
     except WebSocketDisconnect:
+        pass
+    finally:
         manager.disconnect(room_id, websocket)

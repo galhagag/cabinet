@@ -32,3 +32,15 @@ def test_ws_receives_agent_thinking_indicator(client):
         )
         thinking = _drain_until(ws, "agent_thinking")
         assert thinking["agent_key"] == "fce"
+
+
+def test_ws_cleans_up_on_ungracious_disconnect(client):
+    """Any exit path from the receive loop — not just WebSocketDisconnect —
+    must still deregister the connection (Design 04 Lows)."""
+    room = make_room(client, "WsCleanupBank")
+    with client.websocket_connect(f"/ws/rooms/{room['id']}") as ws:
+        manager = client.app.state.manager
+        assert room["id"] in manager._rooms
+    # Context manager exit closes the socket; the server's finally must run.
+    manager = client.app.state.manager
+    assert room["id"] not in manager._rooms

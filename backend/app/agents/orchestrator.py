@@ -38,6 +38,7 @@ ACTIVE = "active"
 
 class RealtimeBroker(Protocol):
     async def publish(self, room_id: str, event: dict) -> None: ...
+    async def client_access(self, room_id: str, user_email: str) -> dict: ...
 
 
 class Orchestrator:
