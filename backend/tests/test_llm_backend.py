@@ -8,6 +8,7 @@ import asyncio
 import logging
 
 import httpx
+import pytest
 
 from app.agents.foundry_client import (
     AzureOpenAILLM,
@@ -111,6 +112,23 @@ def test_azure_openai_complete_degrades_politely_on_content_filter():
         )
     )
     assert "HANDOFF_TO_HUMAN" in result.text
+
+
+def test_azure_openai_complete_wraps_sdk_errors_as_llmerror():
+    from app.agents.foundry_client import LLMError
+
+    def failing_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={"error": {"message": "boom"}})
+
+    backend = _backend(failing_handler)
+    with pytest.raises(LLMError):
+        _run(
+            backend.complete(
+                agent_key="data_expert",
+                system_prompt="You are helpful.",
+                turns=[ChatTurn(role="user", content="hi")],
+            )
+        )
 
 
 def test_mock_reply_quote_does_not_leak_nested_tag_or_cut_mid_word():
