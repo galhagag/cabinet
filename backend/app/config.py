@@ -168,6 +168,7 @@ class Settings:
     # Names of secrets used for token encryption and OAuth state signing.
     token_encryption_key_secret: str = "token-encryption-key"
     state_signing_key_secret: str = "state-signing-key"
+    token_encryption_key_previous_secret: str = "token-encryption-key-previous"
 
     # --- Invites -----------------------------------------------------------
     invite_ttl_hours: int = field(

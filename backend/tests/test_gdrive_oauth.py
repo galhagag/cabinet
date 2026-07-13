@@ -5,6 +5,48 @@ import asyncio
 from .conftest import install_mock_google, make_room
 
 
+def test_token_encrypted_with_old_key_still_decrypts_after_rotation(monkeypatch):
+    """MultiFernet keyring: rotating the primary key must not orphan tokens
+    encrypted under the previous key (Design 08 / key rotation)."""
+    from cryptography.fernet import Fernet
+    from app.config import Settings
+    from app.services.google_oauth import GoogleOAuthService
+
+    old_key = Fernet.generate_key().decode()
+    new_key = Fernet.generate_key().decode()
+
+    monkeypatch.setenv("CABINET_SECRET_TOKEN_ENCRYPTION_KEY", old_key)
+    settings = Settings()
+
+    async def scenario():
+        class _Secrets:
+            async def get_secret(self, name):
+                if name == "token-encryption-key":
+                    return old_key
+                raise KeyError(name)
+
+        service_v1 = GoogleOAuthService(settings, _Secrets())
+        await service_v1._ensure_fernet()
+        encrypted = service_v1.encrypt("super-secret-refresh-token")
+
+        class _RotatedSecrets:
+            async def get_secret(self, name):
+                if name == "token-encryption-key":
+                    return new_key
+                if name == "token-encryption-key-previous":
+                    return old_key
+                raise KeyError(name)
+
+        service_v2 = GoogleOAuthService(settings, _RotatedSecrets())
+        await service_v2._ensure_fernet()
+        assert service_v2.decrypt(encrypted) == "super-secret-refresh-token"
+
+        new_ciphertext = service_v2.encrypt("a-new-token")
+        assert service_v2.decrypt(new_ciphertext) == "a-new-token"
+
+    asyncio.run(scenario())
+
+
 def test_authorize_url_and_signed_state(client):
     room = make_room(client, "DriveBank")
     resp = client.get(f"/api/rooms/{room['id']}/gdrive/authorize")

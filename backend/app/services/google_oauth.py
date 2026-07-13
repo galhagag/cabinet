@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import httpx
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, MultiFernet
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,7 +35,7 @@ class GoogleOAuthService:
         self._settings = settings
         self._secrets = secret_provider
         self._transport = transport
-        self._fernet: Fernet | None = None
+        self._fernet: MultiFernet | None = None
         self._serializer: URLSafeTimedSerializer | None = None
 
     # ------------------------------------------------------------------
@@ -129,7 +129,7 @@ class GoogleOAuthService:
     # ------------------------------------------------------------------
     # Token encryption at rest (Fernet; key from Key Vault in prod)
     # ------------------------------------------------------------------
-    def _get_fernet(self) -> Fernet:
+    def _get_fernet(self) -> MultiFernet:
         if self._fernet is None:
             raise RuntimeError(
                 "Fernet key not primed — every code path that encrypts or "
@@ -137,12 +137,21 @@ class GoogleOAuthService:
             )
         return self._fernet
 
-    async def _ensure_fernet(self) -> Fernet:
+    async def _ensure_fernet(self) -> MultiFernet:
         if self._fernet is None:
-            key = await self._secrets.get_secret(
+            primary = await self._secrets.get_secret(
                 self._settings.token_encryption_key_secret
             )
-            self._fernet = Fernet(key.encode())
+            keys = [Fernet(primary.encode())]
+            try:
+                previous = await self._secrets.get_secret(
+                    self._settings.token_encryption_key_previous_secret
+                )
+            except Exception:
+                previous = ""
+            if previous:
+                keys.append(Fernet(previous.encode()))
+            self._fernet = MultiFernet(keys)
         return self._fernet
 
     def encrypt(self, value: str) -> str:
