@@ -124,9 +124,21 @@ section:
   `defaultdict(asyncio.Lock)` on the orchestrator). A second concurrent POST to
   the same room awaits the first, then runs cleanly with correct alternation.
 - **Multi-replica (prod):** a Postgres advisory lock
-  (`SELECT pg_advisory_xact_lock(hashtext(:room_id))`) held for the transaction
-  that claims the loop, so only one replica drives a given room. On SQLite the
-  advisory-lock call is a no-op and the in-process lock suffices (tests).
+  (`SELECT pg_advisory_xact_lock(hashtext(:room_id))`), taken once at the top
+  of `handle_human_message` and `/resume`, right before each one's
+  paused→active / cycle-reset transition. **Scope correction (post-merge
+  review of `fix/orchestrator-room-lock-02-stage2`, 2026-07-13):** because
+  `pg_advisory_xact_lock` releases at the *next* commit and both entry points
+  commit repeatedly (once per turn) as the loop runs, this only makes the
+  initial claim transaction mutually exclusive across replicas — it does
+  *not* make the multi-turn loop that follows mutually exclusive across
+  replicas. On a single replica the in-process lock still fully serializes
+  the loop (this is what the two `test_hardening.py` races exercise); on
+  multiple replicas, two loops for the same room can still interleave once
+  each has passed its own claim step. Closing that gap for real needs Stage
+  3's distributed loop-ownership record (below), not a bigger advisory lock.
+  On SQLite the advisory-lock call is a no-op and the in-process lock
+  suffices (tests).
 
 Fix the duplicate-`room_resumed`: derive `was_paused` from the `RETURNING` of
 the status-transition UPDATE (as `/resume` already does at

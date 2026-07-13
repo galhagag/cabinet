@@ -76,6 +76,36 @@ def test_concurrent_resume_and_new_message_are_serialized(client):
     assert len(agent_msgs) == 18
 
 
+def test_resume_and_post_message_both_attempt_replica_lock(client, monkeypatch):
+    """Both critical-section entry points must attempt the cross-replica
+    Postgres advisory lock (no-op here on SQLite, but the call itself must
+    happen). Design 02 Stage 2 wired this into handle_human_message but
+    originally missed resume_room, leaving /resume with zero cross-replica
+    protection even though its own docstring claimed both paths were
+    covered — the in-process room_lock only serializes callers within one
+    process, so a second replica would sail straight through unresumed."""
+    from app.agents.orchestrator import Orchestrator
+
+    calls: list[str] = []
+    original = Orchestrator.acquire_replica_lock
+
+    async def spy(self, session, room_id):
+        calls.append(room_id)
+        return await original(self, session, room_id)
+
+    monkeypatch.setattr(Orchestrator, "acquire_replica_lock", spy)
+
+    room = make_room(client, "ReplicaLockBank")
+
+    client.post(f"/api/rooms/{room['id']}/messages", json={"content": "go"})
+    assert calls == [room["id"]], "handle_human_message must attempt the replica lock"
+    calls.clear()
+
+    resp = client.post(f"/api/rooms/{room['id']}/resume")
+    assert resp.status_code == 200, resp.text
+    assert calls == [room["id"]], "resume_room must attempt the replica lock too"
+
+
 def test_concurrent_resumes_grant_single_budget(client):
     room = make_room(client, "ResumeRaceBank")
     client.post(f"/api/rooms/{room['id']}/messages", json={"content": "go"})
