@@ -16,6 +16,7 @@ Owns the two behaviors at the heart of the Cabinet:
 """
 from __future__ import annotations
 
+import logging
 from typing import Protocol
 
 from sqlalchemy import select, update
@@ -23,9 +24,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import Settings
 from ..db.models import AgentGlobalConfig, AgentSkill, Message, Room
-from .foundry_client import ChatTurn, LLMBackend
+from .foundry_client import ChatTurn, LLMBackend, LLMError
 from .profiles import AGENT_KEYS, DATA_EXPERT_KEY, DISPLAY_NAMES, FCE_KEY
 from .prompt_compiler import SkillSection, compile_system_prompt, parse_mention
+
+logger = logging.getLogger(__name__)
 
 HANDOFF_TOKEN = "HANDOFF_TO_HUMAN"
 
@@ -142,9 +145,14 @@ class Orchestrator:
             await self._broker.publish(
                 room.id, {"type": "agent_thinking", "agent_key": speaker}
             )
-            result = await self._llm.complete(
-                agent_key=speaker, system_prompt=system_prompt, turns=turns
-            )
+            try:
+                result = await self._llm.complete(
+                    agent_key=speaker, system_prompt=system_prompt, turns=turns
+                )
+            except LLMError as exc:
+                fail_msg = await self._fail_turn(session, room, speaker, exc)
+                created.append(fail_msg)
+                break
 
             msg = Message(
                 room_id=room.id,
@@ -168,6 +176,43 @@ class Orchestrator:
         await self._pause_if_exhausted(session, room)
         await session.refresh(room)
         return created
+
+    async def _fail_turn(
+        self, session: AsyncSession, room: Room, agent_key: str, exc: Exception
+    ) -> Message:
+        """An LLM call failed mid-loop.
+
+        The cycle was already claimed before the call, so without this the
+        room is stranded ACTIVE at an exhausted budget — no agent can ever
+        speak again and /resume 409s (Design 02 / C2). Leave a visible system
+        notice, pause the room so /resume works, and tell clients the
+        pending typing indicator is done.
+        """
+        logger.warning(
+            "LLM completion failed for %s in room %s: %s", agent_key, room.id, exc
+        )
+        msg = Message(
+            room_id=room.id,
+            sender_type="system",
+            sender_name="System",
+            content=(
+                f"⚠️ {DISPLAY_NAMES[agent_key]} could not respond (upstream error). "
+                "The room is paused — resume to retry."
+            ),
+        )
+        session.add(msg)
+        await session.execute(
+            update(Room)
+            .where(Room.id == room.id, Room.status == ACTIVE)
+            .values(status=PAUSED)
+        )
+        await session.commit()
+        await self._broker.publish(room.id, self._msg_event(msg))
+        await self._broker.publish(
+            room.id,
+            {"type": "agent_error", "agent_key": agent_key, "recoverable": True},
+        )
+        return msg
 
     async def _claim_cycle(self, session: AsyncSession, room: Room) -> int | None:
         """Atomically consume one cycle; None when paused or budget exhausted."""

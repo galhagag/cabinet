@@ -47,6 +47,12 @@ class LLMResult:
     output_tokens: int = 0
 
 
+class LLMError(Exception):
+    """The LLM backend failed to produce a completion (timeout, API error,
+    refusal-that-isn't-handled-server-side, etc.). Callers must treat this as
+    recoverable: pause the room, never leave it stranded active."""
+
+
 class LLMBackend(Protocol):
     async def complete(
         self, *, agent_key: str, system_prompt: str, turns: list[ChatTurn]
@@ -134,12 +140,15 @@ class FoundryLLM:
     async def complete(
         self, *, agent_key: str, system_prompt: str, turns: list[ChatTurn]
     ) -> LLMResult:
-        response = await self._client.messages.create(
-            model=self._settings.foundry_model,
-            max_tokens=self._settings.agent_max_tokens,
-            system=system_prompt,
-            messages=[{"role": t.role, "content": t.content} for t in turns],
-        )
+        try:
+            response = await self._client.messages.create(
+                model=self._settings.foundry_model,
+                max_tokens=self._settings.agent_max_tokens,
+                system=system_prompt,
+                messages=[{"role": t.role, "content": t.content} for t in turns],
+            )
+        except Exception as exc:
+            raise LLMError(f"Foundry completion failed for {agent_key}: {exc}") from exc
         input_tokens = getattr(response.usage, "input_tokens", 0) or 0
         output_tokens = getattr(response.usage, "output_tokens", 0) or 0
 
@@ -198,11 +207,14 @@ class AzureOpenAILLM:
         messages = [{"role": "system", "content": system_prompt}] + [
             {"role": t.role, "content": t.content} for t in turns
         ]
-        response = await self._client.chat.completions.create(
-            model=self._settings.azure_openai_deployment,
-            max_completion_tokens=self._settings.agent_max_tokens,
-            messages=messages,
-        )
+        try:
+            response = await self._client.chat.completions.create(
+                model=self._settings.azure_openai_deployment,
+                max_completion_tokens=self._settings.agent_max_tokens,
+                messages=messages,
+            )
+        except Exception as exc:
+            raise LLMError(f"Azure OpenAI completion failed for {agent_key}: {exc}") from exc
         choice = response.choices[0]
         usage = response.usage
         input_tokens = getattr(usage, "prompt_tokens", 0) or 0

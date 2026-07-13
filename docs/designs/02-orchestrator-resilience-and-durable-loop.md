@@ -1,6 +1,14 @@
 # Design 02 — Orchestrator Resilience & Durable Agent Loop
 
 **Status:** Proposed
+
+**Phase 1 progress:** Stage 1 (C2 — try/except around the LLM call, a system
+notice, pausing the room, and a new `agent_error` terminal event) shipped in
+`fix/orchestrator-crash-safety-02`. The Stage 1 timeout/bounded-retry
+sub-item and the handoff-sentinel Low were deliberately deferred to keep this
+slice minimal. Remaining: Stage 2 (H5 per-room serialization) and Stage 3
+(M4 — move the loop off the request path) — not yet started.
+
 **Addresses:** C2 (no error handling around the LLM call → stranded room),
 H5 (no per-room loop serialization → interleaved loops), M4 (loop runs inside
 the HTTP request, no background task, no idempotency), plus the handoff-token
