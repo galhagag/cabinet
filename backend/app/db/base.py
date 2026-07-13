@@ -56,7 +56,13 @@ async def get_session() -> AsyncIterator[AsyncSession]:
 
 async def init_db() -> None:
     from . import models  # noqa: F401 — register mappings
+    from ..config import get_settings
 
+    if get_settings().env != "dev":
+        # staging/production: schema is managed by `alembic upgrade head` as
+        # a release step, never by app startup — N replicas racing
+        # `create_all`/DDL is exactly the H13 bug this design fixes.
+        return
     engine = get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

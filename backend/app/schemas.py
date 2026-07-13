@@ -66,7 +66,7 @@ class InviteCreateOut(BaseModel):
 
 class JoinRequest(BaseModel):
     token: str
-    display_name: str = ""
+    display_name: str = Field(default="", max_length=256)
 
 
 # --- Messages ---------------------------------------------------------------
