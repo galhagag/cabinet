@@ -21,6 +21,9 @@ class SecretProvider(Protocol):
     async def get_secret(self, name: str) -> str: ...
 
 
+_CRYPTO_KEY_NAMES = {"token-encryption-key", "state-signing-key"}
+
+
 # Dev defaults are generated once per process and cached so that everything
 # encrypted/signed during a run stays verifiable for the whole run.
 _dev_default_cache: dict[str, str] = {}
@@ -48,13 +51,31 @@ def _dev_default(name: str) -> str:
 
 
 class EnvSecretProvider:
-    """Dev/test provider: env vars with deterministic per-process defaults."""
+    """Dev/test provider: env vars with deterministic per-process defaults.
+
+    Outside CABINET_ENV=dev, a blank crypto-key var is a hard error rather
+    than a silently-generated ephemeral key (M2) — a new key every restart
+    makes Google Drive tokens permanently undecryptable, and a different key
+    per replica breaks cross-replica OAuth-state verification.
+    """
+
+    def __init__(self, settings: "Settings | None" = None) -> None:
+        self._settings = settings
 
     async def get_secret(self, name: str) -> str:
         env_name = "CABINET_SECRET_" + name.upper().replace("-", "_")
         value = os.environ.get(env_name)
         if value:
             return value
+        if (
+            self._settings is not None
+            and self._settings.env != "dev"
+            and name in _CRYPTO_KEY_NAMES
+        ):
+            raise RuntimeError(
+                f"{env_name} must be set when CABINET_ENV is not dev — refusing "
+                f"to generate an ephemeral {name} (see Design 08 / M2)"
+            )
         return _dev_default(name)
 
 
@@ -85,5 +106,5 @@ def build_secret_provider(settings: Settings) -> SecretProvider:
     if settings.secrets_provider == "azure_keyvault":
         return AzureKeyVaultSecretProvider(settings.keyvault_url)
     if settings.secrets_provider == "env":
-        return EnvSecretProvider()
+        return EnvSecretProvider(settings)
     raise ValueError(f"unknown secrets provider: {settings.secrets_provider}")

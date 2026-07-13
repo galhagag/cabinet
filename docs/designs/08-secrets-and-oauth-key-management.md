@@ -7,6 +7,19 @@ per-process crypto keys when env vars are blank → undecryptable Drive tokens,
 cross-replica OAuth-state failure).
 **Effort:** S (≤2 days) + a credential-rotation operational task
 
+**Phase 2 progress:** M2 shipped in `fix/secrets-key-stability-08` —
+`EnvSecretProvider` now raises instead of generating an ephemeral key for
+`token-encryption-key`/`state-signing-key` when `CABINET_ENV != dev`, and
+`GoogleOAuthService` uses a `MultiFernet` keyring (primary +
+`token-encryption-key-previous`) so rotating the encryption key doesn't
+orphan existing Drive tokens. **H10 (actually rotating the leaked Google
+OAuth secret, Azure AI key, and Postgres password) is NOT done and cannot be
+done by an agent in this environment** — it requires access to Google Cloud
+Console, Azure Key Vault, and the production Postgres server. This remains
+an outstanding manual/operational task for the team. Item 4 (confirming the
+Container App runs with a managed identity) is also unchanged — it's an
+Azure infra configuration check, not code.
+
 ---
 
 ## Problem
