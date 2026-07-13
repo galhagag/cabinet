@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { getRoomAgent, updateRoomAgentInstructions } from "../api";
-import type { AgentKey } from "../types";
+import { getInstructionsHistory, getRoomAgent, updateRoomAgentInstructions } from "../api";
+import type { AgentKey, InstructionsHistoryEntryOut } from "../types";
 import { pushToast, toastError } from "../toast";
 
 export default function AgentInstructionsTab({
@@ -16,6 +16,9 @@ export default function AgentInstructionsTab({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState<InstructionsHistoryEntryOut[] | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -35,10 +38,23 @@ export default function AgentInstructionsTab({
       const updated = await updateRoomAgentInstructions(roomId, agentKey, instructions);
       setSaved(updated.instructions);
       pushToast("info", "Instructions saved");
+      setHistory(null);
     } catch (err) {
       toastError(err, "Failed to save instructions");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const toggleHistory = () => {
+    const next = !historyOpen;
+    setHistoryOpen(next);
+    if (next && history === null) {
+      setHistoryLoading(true);
+      getInstructionsHistory(roomId, agentKey)
+        .then(setHistory)
+        .catch((err) => toastError(err, "Failed to load instructions history"))
+        .finally(() => setHistoryLoading(false));
     }
   };
 
@@ -65,6 +81,9 @@ export default function AgentInstructionsTab({
       </label>
 
       <div className="agent-editor-footer">
+        <button className="btn btn-small" onClick={toggleHistory}>
+          {historyOpen ? "Hide history" : "Show history"}
+        </button>
         <button
           className="btn btn-primary"
           onClick={save}
@@ -73,6 +92,26 @@ export default function AgentInstructionsTab({
           {saving ? "Saving…" : instructions === saved ? "Saved" : "Save instructions"}
         </button>
       </div>
+
+      {historyOpen && (
+        <div className="instructions-history">
+          {historyLoading && <div className="muted">Loading history…</div>}
+          {!historyLoading && history !== null && history.length === 0 && (
+            <div className="muted">No previous edits.</div>
+          )}
+          {!historyLoading &&
+            history !== null &&
+            history.map((entry, i) => (
+              <div key={i} className="instructions-history-entry">
+                <div className="muted">
+                  {new Date(entry.created_at).toLocaleString()} — {entry.actor}
+                </div>
+                <pre className="instructions-history-old">{entry.old_instructions || "(empty)"}</pre>
+                <pre className="instructions-history-new">{entry.new_instructions || "(empty)"}</pre>
+              </div>
+            ))}
+        </div>
+      )}
     </div>
   );
 }

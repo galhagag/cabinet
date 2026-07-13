@@ -6,6 +6,7 @@ import type {
   CompiledPromptOut,
   GDriveAuthorizeOut,
   GDriveStatusOut,
+  InstructionsHistoryEntryOut,
   InviteCreateOut,
   MessageOut,
   PostMessageResult,
@@ -126,6 +127,11 @@ export const updateRoomAgentInstructions = (
     method: "PUT",
     body: JSON.stringify({ instructions }),
   });
+
+export const getInstructionsHistory = (roomId: string, agentKey: string) =>
+  request<InstructionsHistoryEntryOut[]>(
+    `/api/rooms/${roomId}/agents/${agentKey}/instructions/history`,
+  );
 
 export const getAgentUsage = (roomId: string, agentKey: string) =>
   request<AgentUsageOut>(`/api/rooms/${roomId}/agents/${agentKey}/usage`);

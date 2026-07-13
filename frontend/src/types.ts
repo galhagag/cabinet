@@ -40,6 +40,13 @@ export interface InstructionsUpdate {
   instructions: string;
 }
 
+export interface InstructionsHistoryEntryOut {
+  actor: string;
+  old_instructions: string;
+  new_instructions: string;
+  created_at: string;
+}
+
 export interface AgentUsageOut {
   agent_key: AgentKey;
   message_count: number;
