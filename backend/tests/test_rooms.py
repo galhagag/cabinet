@@ -52,3 +52,20 @@ def test_invite_and_join_flow(client):
 def test_join_with_bad_token_404(client):
     resp = client.post("/api/rooms/join", json={"token": "not-a-real-token"})
     assert resp.status_code == 404
+
+
+def test_concurrent_create_for_same_customer_yields_one_201_one_409(client):
+    import asyncio
+    import httpx
+
+    async def race():
+        transport = httpx.ASGITransport(app=client.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+            return await asyncio.gather(
+                ac.post("/api/rooms", json={"customer_name": "RaceCreateBank", "enrichment_prompt": None}),
+                ac.post("/api/rooms", json={"customer_name": "RaceCreateBank", "enrichment_prompt": None}),
+            )
+
+    first, second = client.portal.call(race)
+    codes = sorted([first.status_code, second.status_code])
+    assert codes == [201, 409]

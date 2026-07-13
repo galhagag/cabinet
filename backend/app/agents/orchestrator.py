@@ -364,16 +364,26 @@ class Orchestrator:
 
 
 async def seed_global_config(session: AsyncSession) -> None:
-    """Ensure both expert baselines exist (idempotent, first-boot seed)."""
+    """Ensure both expert baselines exist (idempotent, race-safe upsert —
+    concurrent replicas cold-booting can no longer crash each other on a PK
+    IntegrityError, Design 05 / H13)."""
     from .profiles import DEFAULT_BASELINES
 
+    dialect = session.bind.dialect.name if session.bind is not None else ""
+    if dialect == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert as dialect_insert
+    else:
+        from sqlalchemy.dialects.sqlite import insert as dialect_insert
+
     for key in AGENT_KEYS:
-        if await session.get(AgentGlobalConfig, key) is None:
-            session.add(
-                AgentGlobalConfig(
-                    agent_key=key,
-                    display_name=DISPLAY_NAMES[key],
-                    system_prompt=DEFAULT_BASELINES[key],
-                )
+        stmt = (
+            dialect_insert(AgentGlobalConfig)
+            .values(
+                agent_key=key,
+                display_name=DISPLAY_NAMES[key],
+                system_prompt=DEFAULT_BASELINES[key],
             )
+            .on_conflict_do_nothing(index_elements=["agent_key"])
+        )
+        await session.execute(stmt)
     await session.commit()

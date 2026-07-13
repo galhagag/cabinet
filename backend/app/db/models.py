@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     JSON,
     BigInteger,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -54,6 +55,11 @@ class AgentGlobalConfig(Base):
 
 class Room(Base):
     __tablename__ = "rooms"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active', 'paused_awaiting_human')", name="ck_rooms_status"
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     customer_name: Mapped[str] = mapped_column(String(256), unique=True)
@@ -64,6 +70,9 @@ class Room(Base):
     cycle_limit: Mapped[int] = mapped_column(Integer, default=6)
     created_by: Mapped[str] = mapped_column(String(256), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
 
     agents: Mapped[list["RoomAgent"]] = relationship(
         back_populates="room", cascade="all, delete-orphan"
@@ -88,14 +97,20 @@ class RoomAgent(Base):
 
 class Message(Base):
     __tablename__ = "messages"
-    __table_args__ = (Index("ix_messages_room_seq", "room_id", "seq"),)
+    __table_args__ = (
+        Index("ix_messages_room_seq", "room_id", "seq"),
+        CheckConstraint(
+            "sender_type IN ('human', 'agent', 'system')",
+            name="ck_messages_sender_type",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     # Monotonic ordering key: created_at has only µs resolution and can tie
     # within a burst of agent turns; seq (wall-clock ns) breaks ties
     # deterministically. Ordering is always (seq, id).
     seq: Mapped[int] = mapped_column(BigInteger, default=time.time_ns)
-    room_id: Mapped[str] = mapped_column(ForeignKey("rooms.id", ondelete="CASCADE"))
+    room_id: Mapped[str] = mapped_column(ForeignKey("rooms.id", ondelete="RESTRICT"))
     # "human" | "agent" | "system"
     sender_type: Mapped[str] = mapped_column(String(16))
     sender_name: Mapped[str] = mapped_column(String(256))
@@ -111,7 +126,10 @@ class Message(Base):
 
 class RoomMember(Base):
     __tablename__ = "room_members"
-    __table_args__ = (UniqueConstraint("room_id", "user_email"),)
+    __table_args__ = (
+        UniqueConstraint("room_id", "user_email"),
+        CheckConstraint("role IN ('owner', 'member')", name="ck_room_members_role"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     room_id: Mapped[str] = mapped_column(ForeignKey("rooms.id", ondelete="CASCADE"))
@@ -130,7 +148,9 @@ class RoomInvite(Base):
     token: Mapped[str] = mapped_column(
         String(64), primary_key=True, default=new_invite_token
     )
-    room_id: Mapped[str] = mapped_column(ForeignKey("rooms.id", ondelete="CASCADE"))
+    room_id: Mapped[str] = mapped_column(
+        ForeignKey("rooms.id", ondelete="CASCADE"), index=True
+    )
     created_by: Mapped[str] = mapped_column(String(256))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
@@ -144,6 +164,12 @@ class GDriveConnection(Base):
     """
 
     __tablename__ = "gdrive_connections"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'connected', 'linked', 'error', 'revoked')",
+            name="ck_gdrive_connections_status",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     room_id: Mapped[str] = mapped_column(
@@ -178,9 +204,9 @@ class AgentSkill(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     room_id: Mapped[str | None] = mapped_column(
-        ForeignKey("rooms.id", ondelete="CASCADE"), nullable=True
+        ForeignKey("rooms.id", ondelete="CASCADE"), nullable=True, index=True
     )
-    agent_key: Mapped[str] = mapped_column(String(32))
+    agent_key: Mapped[str] = mapped_column(String(32), index=True)
     skill_name: Mapped[str] = mapped_column(String(256))
     # "md" | "zip"
     skill_type: Mapped[str] = mapped_column(String(8))
@@ -193,7 +219,9 @@ class AuditLog(Base):
     __tablename__ = "audit_log"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    room_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    room_id: Mapped[str | None] = mapped_column(
+        ForeignKey("rooms.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     actor: Mapped[str] = mapped_column(String(256))
     action: Mapped[str] = mapped_column(String(64))
     detail: Mapped[dict] = mapped_column(JSON, default=dict)

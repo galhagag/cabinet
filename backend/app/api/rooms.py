@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, selectinload
 
@@ -59,7 +60,12 @@ def _room_out(
 
 
 async def _get_room_with_agents(session: AsyncSession, room_id: str) -> Room:
-    room = await session.get(Room, room_id, options=[selectinload(Room.agents)])
+    result = await session.execute(
+        select(Room)
+        .where(Room.id == room_id, Room.deleted_at.is_(None))
+        .options(selectinload(Room.agents))
+    )
+    room = result.scalar_one_or_none()
     if room is None:
         raise HTTPException(status_code=404, detail="room not found")
     return room
@@ -132,7 +138,14 @@ async def create_room(
         RoomMember(user_email=user_email, display_name=user_email, role="owner")
     ]
     session.add(room)
-    await session.flush()
+    try:
+        await session.flush()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=f"room for customer already exists: {payload.customer_name}",
+        )
     session.add(
         AuditLog(
             room_id=room.id,
@@ -153,7 +166,7 @@ async def list_rooms(
     result = await session.execute(
         select(Room)
         .join(RoomMember, RoomMember.room_id == Room.id)
-        .where(RoomMember.user_email == user_email)
+        .where(RoomMember.user_email == user_email, Room.deleted_at.is_(None))
         .options(selectinload(Room.agents))
         .order_by(Room.created_at)
     )
