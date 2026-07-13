@@ -1,6 +1,13 @@
 # Design 03 — Authorization & Tenancy Hardening
 
 **Status:** Proposed
+
+**Phase 1 progress:** H3 (list_rooms scoped to membership) and H4 (admin read
+endpoints gated by require_admin) shipped in
+`fix/authz-list-rooms-admin-reads-03`. Remaining: M3 (single-use/revocable
+invites) and the Entra identity Lows (`oid` keying, JWKS refetch protection) —
+not yet started.
+
 **Addresses:** H3 (`list_rooms` leaks all rooms + message previews), H4 (admin
 read endpoints ungated), M3 (invites multi-use, non-revocable), and the Entra
 identity Lows (mutable `preferred_username` as the identity key; unknown-`kid`

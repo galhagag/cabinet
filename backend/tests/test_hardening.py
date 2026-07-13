@@ -183,3 +183,45 @@ def test_email_addresses_are_not_mentions():
     assert parse_mention("send results to data@dataexpert.io") is None
     assert parse_mention("@FCE check john@fce-bank.com's case") == "fce"
     assert parse_mention("ping @DataExpert about it") == "data_expert"
+
+
+# ---------------------------------------------------------------------------
+# H3: list_rooms must be scoped to the caller's memberships
+# ---------------------------------------------------------------------------
+def test_list_rooms_scoped_to_membership(client):
+    mine = make_room(client, "MyBank")
+    stranger = {"X-User-Email": "stranger@elsewhere.example"}
+    client.post(
+        "/api/rooms",
+        json={"customer_name": "StrangerBank", "enrichment_prompt": None},
+        headers=stranger,
+    )
+
+    mine_ids = {r["id"] for r in client.get("/api/rooms").json()}
+    assert mine_ids == {mine["id"]}
+
+    stranger_ids = {r["id"] for r in client.get("/api/rooms", headers=stranger).json()}
+    assert mine["id"] not in stranger_ids
+    assert len(stranger_ids) == 1
+
+
+# ---------------------------------------------------------------------------
+# H4: admin READ endpoints must be gated exactly like admin writes
+# ---------------------------------------------------------------------------
+def test_admin_read_endpoints_denied_for_non_admin(client, monkeypatch):
+    from app.config import reset_settings_cache
+
+    monkeypatch.setenv("CABINET_ADMIN_EMAILS", "boss@thetaray.com")
+    reset_settings_cache()
+    try:
+        assert client.get("/api/admin/agents").status_code == 403
+        assert client.get("/api/admin/agents/fce").status_code == 403
+        assert client.get("/api/admin/agents/fce/skills").status_code == 403
+
+        admin = {"X-User-Email": "boss@thetaray.com"}
+        assert client.get("/api/admin/agents", headers=admin).status_code == 200
+        assert client.get("/api/admin/agents/fce", headers=admin).status_code == 200
+        assert client.get("/api/admin/agents/fce/skills", headers=admin).status_code == 200
+    finally:
+        monkeypatch.delenv("CABINET_ADMIN_EMAILS")
+        reset_settings_cache()
