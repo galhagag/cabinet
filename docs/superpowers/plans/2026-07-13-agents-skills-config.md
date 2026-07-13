@@ -317,19 +317,12 @@ from ..schemas import (
 from .deps import get_current_user_email, get_broker, get_orchestrator, require_room_member
 ```
 
-Then insert these two endpoints directly before the existing `get_compiled_prompt` endpoint (before line 301):
+Then insert this helper and these two endpoints directly before the existing `get_compiled_prompt` endpoint (before line 301):
 
 ```python
-@router.get(
-    "/{room_id}/agents/{agent_key}",
-    response_model=RoomAgentDetailOut,
-)
-async def get_room_agent(
-    room_id: str,
-    agent_key: str,
-    session: AsyncSession = Depends(get_session),
-    _member: str = Depends(require_room_member),
-) -> RoomAgentDetailOut:
+async def _get_agent_config_and_room_agent(
+    session: AsyncSession, room_id: str, agent_key: str
+) -> tuple[AgentGlobalConfig, RoomAgent]:
     if agent_key not in AGENT_KEYS:
         raise HTTPException(status_code=400, detail=f"unknown agent: {agent_key}")
 
@@ -346,12 +339,32 @@ async def get_room_agent(
     if room_agent is None:
         raise HTTPException(status_code=404, detail="room not found")
 
+    return config, room_agent
+
+
+def _room_agent_detail_out(
+    agent_key: str, config: AgentGlobalConfig, room_agent: RoomAgent
+) -> RoomAgentDetailOut:
     return RoomAgentDetailOut(
         agent_key=agent_key,
         display_name=room_agent.display_name,
         system_prompt=config.system_prompt,
         instructions=room_agent.instructions,
     )
+
+
+@router.get(
+    "/{room_id}/agents/{agent_key}",
+    response_model=RoomAgentDetailOut,
+)
+async def get_room_agent(
+    room_id: str,
+    agent_key: str,
+    session: AsyncSession = Depends(get_session),
+    _member: str = Depends(require_room_member),
+) -> RoomAgentDetailOut:
+    config, room_agent = await _get_agent_config_and_room_agent(session, room_id, agent_key)
+    return _room_agent_detail_out(agent_key, config, room_agent)
 
 
 @router.put(
@@ -366,21 +379,7 @@ async def update_room_agent_instructions(
     broker: RealtimeBroker = Depends(get_broker),
     user_email: str = Depends(require_room_member),
 ) -> RoomAgentDetailOut:
-    if agent_key not in AGENT_KEYS:
-        raise HTTPException(status_code=400, detail=f"unknown agent: {agent_key}")
-
-    config = await session.get(AgentGlobalConfig, agent_key)
-    if config is None:
-        raise HTTPException(status_code=404, detail=f"unknown agent: {agent_key}")
-
-    result = await session.execute(
-        select(RoomAgent).where(
-            RoomAgent.room_id == room_id, RoomAgent.agent_key == agent_key
-        )
-    )
-    room_agent = result.scalar_one_or_none()
-    if room_agent is None:
-        raise HTTPException(status_code=404, detail="room not found")
+    config, room_agent = await _get_agent_config_and_room_agent(session, room_id, agent_key)
 
     room_agent.instructions = payload.instructions
     session.add(
@@ -400,12 +399,7 @@ async def update_room_agent_instructions(
             "agent_key": agent_key,
         },
     )
-    return RoomAgentDetailOut(
-        agent_key=agent_key,
-        display_name=room_agent.display_name,
-        system_prompt=config.system_prompt,
-        instructions=room_agent.instructions,
-    )
+    return _room_agent_detail_out(agent_key, config, room_agent)
 ```
 
 - [ ] **Step 11: Run the tests to verify they pass**
@@ -680,6 +674,19 @@ from .deps import get_broker, get_skills_service, require_room_member
 router = APIRouter(tags=["skills"])
 
 
+def _skill_out(skill: AgentSkill, *, enabled: bool) -> SkillOut:
+    return SkillOut(
+        id=skill.id,
+        room_id=skill.room_id,
+        agent_key=skill.agent_key,
+        skill_name=skill.skill_name,
+        skill_type=skill.skill_type,
+        blob_path=skill.blob_path,
+        created_at=skill.created_at,
+        enabled=enabled,
+    )
+
+
 @router.post(
     "/api/rooms/{room_id}/agents/{agent_key}/skills",
     status_code=201,
@@ -747,19 +754,7 @@ async def list_skills(
     )
     disabled_ids = set(overrides.scalars().all())
 
-    return [
-        SkillOut(
-            id=skill.id,
-            room_id=skill.room_id,
-            agent_key=skill.agent_key,
-            skill_name=skill.skill_name,
-            skill_type=skill.skill_type,
-            blob_path=skill.blob_path,
-            created_at=skill.created_at,
-            enabled=skill.id not in disabled_ids,
-        )
-        for skill in skills
-    ]
+    return [_skill_out(skill, enabled=skill.id not in disabled_ids) for skill in skills]
 
 
 @router.put(
@@ -810,16 +805,7 @@ async def toggle_skill(
             "enabled": payload.enabled,
         },
     )
-    return SkillOut(
-        id=skill.id,
-        room_id=skill.room_id,
-        agent_key=skill.agent_key,
-        skill_name=skill.skill_name,
-        skill_type=skill.skill_type,
-        blob_path=skill.blob_path,
-        created_at=skill.created_at,
-        enabled=payload.enabled,
-    )
+    return _skill_out(skill, enabled=payload.enabled)
 ```
 
 - [ ] **Step 8: Run the tests to verify they pass**
