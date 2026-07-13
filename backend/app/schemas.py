@@ -40,6 +40,13 @@ class InstructionsUpdate(BaseModel):
     instructions: str = ""
 
 
+class InstructionsHistoryEntryOut(BaseModel):
+    actor: str
+    old_instructions: str
+    new_instructions: str
+    created_at: datetime
+
+
 class AgentUsageOut(BaseModel):
     agent_key: str
     message_count: int
