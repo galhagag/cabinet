@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from collections import defaultdict
 from typing import Protocol
 
@@ -41,6 +42,31 @@ ACTIVE = "active"
 class RealtimeBroker(Protocol):
     async def publish(self, room_id: str, event: dict) -> None: ...
     async def client_access(self, room_id: str, user_email: str) -> dict: ...
+
+
+def _escape_participant_markup(value: str) -> str:
+    """Neutralize every character an untrusted turn could use to fabricate,
+    prematurely close, or break out of a <participant> tag. Escaping the
+    whole class of markup characters ('<', '>', '"') — rather than only the
+    literal, exact-case '<participant' / '</participant' substrings — also
+    defeats case (<PARTICIPANT>), whitespace (< participant>), and other
+    tag-name variants, since no literal '<' or '>' survives at all."""
+    return value.replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+
+def _wrap_participant(name: str, content: str) -> str:
+    """Frame an untrusted turn so it can never be mistaken for the model's
+    own output or re-open the framing early. Strips control chars from the
+    name, then neutralizes markup-forging characters in BOTH the name and
+    the content: the name interpolates directly into the ``name="..."``
+    attribute, so an unescaped name is just as capable of fabricating a
+    nested <participant> block (or breaking out of the attribute quote) as
+    unescaped content is (Design 06 / H14)."""
+    safe_name = _escape_participant_markup(
+        re.sub(r"[\r\n\x00-\x1f]", " ", name).strip()
+    )
+    safe_content = _escape_participant_markup(content)
+    return f'<participant name="{safe_name}">\n{safe_content}\n</participant>'
 
 
 class Orchestrator:
@@ -341,9 +367,11 @@ class Orchestrator:
     ) -> list[ChatTurn]:
         """Compile the recent room history from this agent's point of view.
 
-        The agent's own past messages become "assistant" turns; everything
-        else (humans, the other agent, system notices) becomes labeled "user"
-        turns. Consecutive same-role turns are merged.
+        The agent's own past messages become "assistant" turns — the only
+        role the model should ever treat as itself. Every other message
+        (human or the other agent) is wrapped in a <participant> block so a
+        member forging a line that mimics the other expert's speaker prefix
+        cannot appear indistinguishable from a genuine turn (Design 06 / H14).
         """
         result = await session.execute(
             select(Message)
@@ -358,7 +386,8 @@ class Orchestrator:
             if m.agent_key == agent_key:
                 role, text = "assistant", m.content
             else:
-                role, text = "user", f"{m.sender_name}: {m.content}"
+                role = "user"
+                text = _wrap_participant(m.sender_name, m.content)
             if turns and turns[-1].role == role:
                 turns[-1] = ChatTurn(role=role, content=turns[-1].content + "\n" + text)
             else:
