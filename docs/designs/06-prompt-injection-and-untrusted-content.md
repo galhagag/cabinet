@@ -7,6 +7,17 @@ limit / zip-bomb defense / content-type validation), M15 (no body-length
 limits).
 **Effort:** M (~1 sprint)
 
+**Phase 2 progress:** H14 (turns from anyone but the agent itself are now
+wrapped in a `<participant name="...">` block with fence-breakout
+neutralization, plus a standing safety line in both baselines), instruction
+isolation (skills/enrichment fenced as "reference material, not
+instructions" with the same fence-breakout neutralization), and M15 (16 KB
+message / 8 KB enrichment size limits) shipped in
+`fix/prompt-injection-content-limits-06`. **M1** (upload size caps,
+zip-bomb defense, magic-byte content-type validation) was **not done** in
+this pass — it touches `services/skills.py`/`api/skills.py` and is
+independent enough to be its own follow-up PR; do not assume it's covered.
+
 ---
 
 ## Problem
