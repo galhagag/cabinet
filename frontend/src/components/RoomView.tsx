@@ -89,6 +89,21 @@ export default function RoomView({
         case "skill_added":
           pushToast("info", `Skill added${event.skill_name ? `: ${event.skill_name}` : ""}`);
           break;
+        case "agent_instructions_updated":
+          pushToast(
+            "info",
+            `Instructions updated for ${agentDisplayName(roomRef.current, event.agent_key)}`,
+          );
+          break;
+        case "agent_skill_toggled":
+          pushToast(
+            "info",
+            `Skill ${event.enabled ? "enabled" : "disabled"} for ${agentDisplayName(
+              roomRef.current,
+              event.agent_key,
+            )}`,
+          );
+          break;
         case "drive_linked":
         case "drive_connected":
           setDriveRefreshSignal((n) => n + 1);

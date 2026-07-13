@@ -2,12 +2,14 @@ import { useState } from "react";
 import type { RoomAgentOut } from "../types";
 import AgentInstructionsTab from "./AgentInstructionsTab";
 import AgentSkillsTab from "./AgentSkillsTab";
+import AgentUsageTab from "./AgentUsageTab";
 
-type Tab = "instructions" | "skills" | "tools" | "mcps" | "memory";
+type Tab = "instructions" | "skills" | "usage" | "tools" | "mcps" | "memory";
 
 const TABS: { key: Tab; label: string; comingSoon?: boolean }[] = [
   { key: "instructions", label: "Instructions" },
   { key: "skills", label: "Skills" },
+  { key: "usage", label: "Usage" },
   { key: "tools", label: "Tools", comingSoon: true },
   { key: "mcps", label: "MCPs", comingSoon: true },
   { key: "memory", label: "Memory", comingSoon: true },
@@ -55,6 +57,7 @@ export default function AgentDetailPanel({
           <AgentInstructionsTab roomId={roomId} agentKey={agent.agent_key} />
         )}
         {tab === "skills" && <AgentSkillsTab roomId={roomId} agentKey={agent.agent_key} />}
+        {tab === "usage" && <AgentUsageTab roomId={roomId} agentKey={agent.agent_key} />}
       </div>
     </div>
   );
