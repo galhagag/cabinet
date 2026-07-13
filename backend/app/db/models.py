@@ -90,6 +90,7 @@ class RoomAgent(Base):
     room_id: Mapped[str] = mapped_column(ForeignKey("rooms.id", ondelete="CASCADE"))
     agent_key: Mapped[str] = mapped_column(String(32))
     display_name: Mapped[str] = mapped_column(String(128))
+    instructions: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     room: Mapped[Room] = relationship(back_populates="agents")

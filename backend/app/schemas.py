@@ -29,6 +29,17 @@ class RoomAgentOut(BaseModel):
     display_name: str
 
 
+class RoomAgentDetailOut(BaseModel):
+    agent_key: str
+    display_name: str
+    system_prompt: str
+    instructions: str
+
+
+class InstructionsUpdate(BaseModel):
+    instructions: str = ""
+
+
 class RoomLastMessageOut(BaseModel):
     sender_type: str
     sender_name: str
