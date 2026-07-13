@@ -831,7 +831,7 @@ Expected: PASS.
 - [ ] **Step 10: Commit**
 
 ```bash
-git add backend/app/db/models.py backend/alembic/versions/b7d4e1a9c3f2_add_room_skill_overrides.py backend/app/schemas.py backend/app/api/skills.py backend/tests/test_skill_toggle.py
+git add backend/app/db/models.py backend/alembic/versions/b7d4e1a9c3f2_add_room_skill_overrides.py backend/app/schemas.py backend/app/api/skills.py backend/app/agents/orchestrator.py backend/tests/test_skill_toggle.py
 git commit -m "feat: add room-scoped skill enable/disable toggle"
 ```
 
