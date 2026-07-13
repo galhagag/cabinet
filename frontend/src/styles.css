@@ -1110,6 +1110,14 @@ textarea {
   color: var(--text-muted);
 }
 
+.skill-item-disabled {
+  opacity: 0.55;
+}
+
+.skill-toggle-btn {
+  margin-left: auto;
+}
+
 /* ---- agents skills view ---------------------------------------------------------- */
 .agents-skills-view {
   max-width: 900px;

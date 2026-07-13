@@ -8,7 +8,6 @@ import Composer from "./Composer";
 import PausedBanner from "./PausedBanner";
 import DrivePanel from "./DrivePanel";
 import InviteDialog from "./InviteDialog";
-import SkillUploadDialog from "./SkillUploadDialog";
 import { AvatarCluster, type AvatarClusterItem } from "./Avatar";
 import AgentsSkillsView from "./AgentsSkillsView";
 
@@ -254,7 +253,6 @@ export default function RoomView({
         <div className="room-header-actions">
           <DrivePanel roomId={roomId} refreshSignal={driveRefreshSignal} />
           <InviteDialog roomId={roomId} />
-          <SkillUploadDialog roomId={roomId} />
         </div>
       </header>
 
