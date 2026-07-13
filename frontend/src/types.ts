@@ -29,6 +29,24 @@ export interface RoomAgentOut {
   display_name: string;
 }
 
+export interface RoomAgentDetailOut {
+  agent_key: AgentKey;
+  display_name: string;
+  system_prompt: string;
+  instructions: string;
+}
+
+export interface InstructionsUpdate {
+  instructions: string;
+}
+
+export interface AgentUsageOut {
+  agent_key: AgentKey;
+  message_count: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+}
+
 export interface RoomLastMessageOut {
   sender_type: SenderType;
   sender_name: string;
@@ -131,6 +149,11 @@ export interface SkillOut {
   skill_type: string;
   blob_path: string;
   created_at: string;
+  enabled: boolean;
+}
+
+export interface SkillToggleUpdate {
+  enabled: boolean;
 }
 
 // --- Compiled prompt -----------------------------------------------------------
@@ -166,6 +189,20 @@ export interface WsSkillAdded {
   skill_name?: string;
 }
 
+export interface WsAgentInstructionsUpdated {
+  type: "agent_instructions_updated";
+  room_id: string;
+  agent_key: string;
+}
+
+export interface WsAgentSkillToggled {
+  type: "agent_skill_toggled";
+  room_id: string;
+  agent_key: string;
+  skill_id: string;
+  enabled: boolean;
+}
+
 export interface WsDriveLinked {
   type: "drive_linked";
   google_folder_id?: string;
@@ -182,5 +219,7 @@ export type RoomWsEvent =
   | WsRoomPaused
   | WsRoomResumed
   | WsSkillAdded
+  | WsAgentInstructionsUpdated
+  | WsAgentSkillToggled
   | WsDriveLinked
   | WsDriveConnected;

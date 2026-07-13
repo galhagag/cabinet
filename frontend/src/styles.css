@@ -594,6 +594,14 @@ textarea {
   flex-wrap: wrap;
 }
 
+/* ---- room tabs (Chat / Agents Skills) ------------------------------------- */
+.room-tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.4rem;
+}
+
 /* ---- paused banner ---------------------------------------------------- */
 .paused-alert {
   display: flex;
@@ -1109,6 +1117,125 @@ textarea {
   border-radius: 4px;
   padding: 0 0.35rem;
   border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+}
+
+.skill-item-disabled {
+  opacity: 0.55;
+}
+
+.skill-toggle-btn {
+  margin-left: auto;
+}
+
+/* ---- agents skills view ---------------------------------------------------------- */
+.agents-skills-view {
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.agent-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.8rem;
+  margin-top: 1rem;
+}
+
+.agent-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 1rem;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.agent-card:hover {
+  border-color: var(--accent);
+}
+
+.agent-detail-panel {
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.agent-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.8rem;
+}
+
+.agent-detail-tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.agent-detail-tab-soon {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.agent-detail-tab-badge {
+  margin-left: 0.35rem;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 0.3rem;
+}
+
+.agent-detail-tab-content {
+  margin-top: 1rem;
+}
+
+.system-prompt-view {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0.7rem 0.9rem;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.usage-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.8rem;
+}
+
+.usage-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+}
+
+.usage-stat-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.usage-stat-label {
+  font-size: 0.78rem;
   color: var(--text-muted);
 }
 

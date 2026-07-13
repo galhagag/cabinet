@@ -90,6 +90,7 @@ class RoomAgent(Base):
     room_id: Mapped[str] = mapped_column(ForeignKey("rooms.id", ondelete="CASCADE"))
     agent_key: Mapped[str] = mapped_column(String(32))
     display_name: Mapped[str] = mapped_column(String(128))
+    instructions: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     room: Mapped[Room] = relationship(back_populates="agents")
@@ -212,6 +213,25 @@ class AgentSkill(Base):
     skill_type: Mapped[str] = mapped_column(String(8))
     blob_path: Mapped[str] = mapped_column(String(1024))
     content_text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class RoomSkillOverride(Base):
+    """Room-scoped disable toggle for a skill (global or room-owned).
+
+    Row presence means "disabled in this room" — this keeps a global skill's
+    on/off state scoped to the room where a member toggled it, since
+    AgentSkill.room_id is NULL (shared) for global skills.
+    """
+
+    __tablename__ = "room_skill_overrides"
+
+    room_id: Mapped[str] = mapped_column(
+        ForeignKey("rooms.id", ondelete="CASCADE"), primary_key=True
+    )
+    skill_id: Mapped[str] = mapped_column(
+        ForeignKey("agent_skills.id", ondelete="CASCADE"), primary_key=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

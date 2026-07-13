@@ -13,12 +13,23 @@ from ..agents.orchestrator import Orchestrator, RealtimeBroker
 from ..agents.profiles import AGENT_KEYS, DISPLAY_NAMES
 from ..config import get_settings
 from ..db.base import get_session
-from ..db.models import AuditLog, Message, Room, RoomAgent, RoomInvite, RoomMember
+from ..db.models import (
+    AgentGlobalConfig,
+    AuditLog,
+    Message,
+    Room,
+    RoomAgent,
+    RoomInvite,
+    RoomMember,
+)
 from ..schemas import (
+    AgentUsageOut,
     CompiledPromptOut,
+    InstructionsUpdate,
     InviteCreateOut,
     JoinRequest,
     RealtimeTokenOut,
+    RoomAgentDetailOut,
     RoomAgentOut,
     RoomCreate,
     RoomLastMessageOut,
@@ -295,6 +306,121 @@ async def create_invite(
         room_id=room.id,
         expires_at=invite.expires_at,
         join_url=f"/join?token={invite.token}",
+    )
+
+
+async def _get_agent_config_and_room_agent(
+    session: AsyncSession, room_id: str, agent_key: str
+) -> tuple[AgentGlobalConfig, RoomAgent]:
+    if agent_key not in AGENT_KEYS:
+        raise HTTPException(status_code=400, detail=f"unknown agent: {agent_key}")
+
+    config = await session.get(AgentGlobalConfig, agent_key)
+    if config is None:
+        raise HTTPException(status_code=404, detail=f"unknown agent: {agent_key}")
+
+    result = await session.execute(
+        select(RoomAgent).where(
+            RoomAgent.room_id == room_id, RoomAgent.agent_key == agent_key
+        )
+    )
+    room_agent = result.scalar_one_or_none()
+    if room_agent is None:
+        raise HTTPException(status_code=404, detail="room not found")
+
+    return config, room_agent
+
+
+def _room_agent_detail_out(
+    agent_key: str, config: AgentGlobalConfig, room_agent: RoomAgent
+) -> RoomAgentDetailOut:
+    return RoomAgentDetailOut(
+        agent_key=agent_key,
+        display_name=room_agent.display_name,
+        system_prompt=config.system_prompt,
+        instructions=room_agent.instructions,
+    )
+
+
+@router.get(
+    "/{room_id}/agents/{agent_key}",
+    response_model=RoomAgentDetailOut,
+)
+async def get_room_agent(
+    room_id: str,
+    agent_key: str,
+    session: AsyncSession = Depends(get_session),
+    _member: str = Depends(require_room_member),
+) -> RoomAgentDetailOut:
+    config, room_agent = await _get_agent_config_and_room_agent(session, room_id, agent_key)
+    return _room_agent_detail_out(agent_key, config, room_agent)
+
+
+@router.put(
+    "/{room_id}/agents/{agent_key}/instructions",
+    response_model=RoomAgentDetailOut,
+)
+async def update_room_agent_instructions(
+    room_id: str,
+    agent_key: str,
+    payload: InstructionsUpdate,
+    session: AsyncSession = Depends(get_session),
+    broker: RealtimeBroker = Depends(get_broker),
+    user_email: str = Depends(require_room_member),
+) -> RoomAgentDetailOut:
+    config, room_agent = await _get_agent_config_and_room_agent(session, room_id, agent_key)
+
+    room_agent.instructions = payload.instructions
+    session.add(
+        AuditLog(
+            room_id=room_id,
+            actor=user_email,
+            action="room_agent_instructions_updated",
+            detail={"agent_key": agent_key},
+        )
+    )
+    await session.commit()
+    await broker.publish(
+        room_id,
+        {
+            "type": "agent_instructions_updated",
+            "room_id": room_id,
+            "agent_key": agent_key,
+        },
+    )
+    return _room_agent_detail_out(agent_key, config, room_agent)
+
+
+@router.get(
+    "/{room_id}/agents/{agent_key}/usage",
+    response_model=AgentUsageOut,
+)
+async def get_agent_usage(
+    room_id: str,
+    agent_key: str,
+    session: AsyncSession = Depends(get_session),
+    _member: str = Depends(require_room_member),
+) -> AgentUsageOut:
+    if agent_key not in AGENT_KEYS:
+        raise HTTPException(status_code=400, detail=f"unknown agent: {agent_key}")
+
+    result = await session.execute(
+        select(
+            func.count(Message.id),
+            func.coalesce(func.sum(Message.input_tokens), 0),
+            func.coalesce(func.sum(Message.output_tokens), 0),
+        ).where(
+            Message.room_id == room_id,
+            Message.agent_key == agent_key,
+            Message.sender_type == "agent",
+        )
+    )
+    message_count, total_input_tokens, total_output_tokens = result.one()
+    return AgentUsageOut(
+        agent_key=agent_key,
+        message_count=message_count,
+        total_input_tokens=total_input_tokens,
+        total_output_tokens=total_output_tokens,
     )
 
 

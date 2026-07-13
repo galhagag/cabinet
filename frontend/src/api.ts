@@ -2,12 +2,14 @@
 import { getAccessToken, isEntraAuth } from "./auth";
 import type {
   AgentConfigOut,
+  AgentUsageOut,
   CompiledPromptOut,
   GDriveAuthorizeOut,
   GDriveStatusOut,
   InviteCreateOut,
   MessageOut,
   PostMessageResult,
+  RoomAgentDetailOut,
   RoomMemberOut,
   RoomOut,
   SkillOut,
@@ -111,6 +113,23 @@ export const joinRoom = (token: string, displayName: string) =>
     body: JSON.stringify({ token, display_name: displayName }),
   });
 
+// --- Room agents (Agents Skills) ----------------------------------------------
+export const getRoomAgent = (roomId: string, agentKey: string) =>
+  request<RoomAgentDetailOut>(`/api/rooms/${roomId}/agents/${agentKey}`);
+
+export const updateRoomAgentInstructions = (
+  roomId: string,
+  agentKey: string,
+  instructions: string,
+) =>
+  request<RoomAgentDetailOut>(`/api/rooms/${roomId}/agents/${agentKey}/instructions`, {
+    method: "PUT",
+    body: JSON.stringify({ instructions }),
+  });
+
+export const getAgentUsage = (roomId: string, agentKey: string) =>
+  request<AgentUsageOut>(`/api/rooms/${roomId}/agents/${agentKey}/usage`);
+
 // --- Messages --------------------------------------------------------------------
 export const listMessages = (roomId: string) =>
   request<MessageOut[]>(`/api/rooms/${roomId}/messages`);
@@ -153,3 +172,14 @@ export const uploadSkill = (roomId: string, agentKey: string, file: File) => {
 
 export const listSkills = (roomId: string, agentKey: string) =>
   request<SkillOut[]>(`/api/rooms/${roomId}/agents/${agentKey}/skills`);
+
+export const toggleSkill = (
+  roomId: string,
+  agentKey: string,
+  skillId: string,
+  enabled: boolean,
+) =>
+  request<SkillOut>(`/api/rooms/${roomId}/agents/${agentKey}/skills/${skillId}`, {
+    method: "PUT",
+    body: JSON.stringify({ enabled }),
+  });

@@ -8,8 +8,8 @@ import Composer from "./Composer";
 import PausedBanner from "./PausedBanner";
 import DrivePanel from "./DrivePanel";
 import InviteDialog from "./InviteDialog";
-import SkillUploadDialog from "./SkillUploadDialog";
 import { AvatarCluster, type AvatarClusterItem } from "./Avatar";
+import AgentsSkillsView from "./AgentsSkillsView";
 
 function agentDisplayName(room: RoomOut | null, agentKey: string): string {
   const found = room?.agents.find((a) => a.agent_key === agentKey);
@@ -34,6 +34,7 @@ export default function RoomView({
   const [resuming, setResuming] = useState(false);
   const [thinkingAgents, setThinkingAgents] = useState<Record<string, string>>({});
   const [driveRefreshSignal, setDriveRefreshSignal] = useState(0);
+  const [activeTab, setActiveTab] = useState<"chat" | "agents">("chat");
   const roomRef = useRef<RoomOut | null>(null);
   roomRef.current = room;
 
@@ -87,6 +88,21 @@ export default function RoomView({
           break;
         case "skill_added":
           pushToast("info", `Skill added${event.skill_name ? `: ${event.skill_name}` : ""}`);
+          break;
+        case "agent_instructions_updated":
+          pushToast(
+            "info",
+            `Instructions updated for ${agentDisplayName(roomRef.current, event.agent_key)}`,
+          );
+          break;
+        case "agent_skill_toggled":
+          pushToast(
+            "info",
+            `Skill ${event.enabled ? "enabled" : "disabled"} for ${agentDisplayName(
+              roomRef.current,
+              event.agent_key,
+            )}`,
+          );
           break;
         case "drive_linked":
         case "drive_connected":
@@ -252,20 +268,38 @@ export default function RoomView({
         <div className="room-header-actions">
           <DrivePanel roomId={roomId} refreshSignal={driveRefreshSignal} />
           <InviteDialog roomId={roomId} />
-          <SkillUploadDialog roomId={roomId} />
         </div>
       </header>
 
-      {room && <PausedBanner status={room.status} onResume={resume} resuming={resuming} />}
+      <nav className="room-tabs">
+        <button
+          className={`nav-link ${activeTab === "chat" ? "nav-active" : ""}`}
+          onClick={() => setActiveTab("chat")}
+        >
+          Chat
+        </button>
+        <button
+          className={`nav-link ${activeTab === "agents" ? "nav-active" : ""}`}
+          onClick={() => setActiveTab("agents")}
+        >
+          Agents Skills
+        </button>
+      </nav>
 
-      <ChatThread messages={messages} thinkingAgents={thinkingAgents} />
+      <div className="room-chat-pane" style={{ display: activeTab === "chat" ? "contents" : "none" }}>
+        {room && <PausedBanner status={room.status} onResume={resume} resuming={resuming} />}
+        <ChatThread messages={messages} thinkingAgents={thinkingAgents} />
+        <Composer
+          onSend={(content) => void send(content)}
+          sending={sending}
+          disabled={!room}
+          disabledHint={!room ? "Loading room…" : undefined}
+        />
+      </div>
 
-      <Composer
-        onSend={(content) => void send(content)}
-        sending={sending}
-        disabled={!room}
-        disabledHint={!room ? "Loading room…" : undefined}
-      />
+      {activeTab === "agents" && room && (
+        <AgentsSkillsView roomId={roomId} agents={room.agents} />
+      )}
     </div>
   );
 }
