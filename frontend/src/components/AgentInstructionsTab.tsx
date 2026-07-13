@@ -6,9 +6,11 @@ import { pushToast, toastError } from "../toast";
 export default function AgentInstructionsTab({
   roomId,
   agentKey,
+  refreshSignal = 0,
 }: {
   roomId: string;
   agentKey: AgentKey;
+  refreshSignal?: number;
 }) {
   const [systemPrompt, setSystemPrompt] = useState<string | null>(null);
   const [instructions, setInstructions] = useState("");
@@ -30,7 +32,7 @@ export default function AgentInstructionsTab({
       })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoading(false));
-  }, [roomId, agentKey]);
+  }, [roomId, agentKey, refreshSignal]);
 
   const save = async () => {
     setSaving(true);

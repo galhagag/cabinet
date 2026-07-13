@@ -34,6 +34,8 @@ export default function RoomView({
   const [resuming, setResuming] = useState(false);
   const [thinkingAgents, setThinkingAgents] = useState<Record<string, string>>({});
   const [driveRefreshSignal, setDriveRefreshSignal] = useState(0);
+  const [instructionsRefreshSignal, setInstructionsRefreshSignal] = useState(0);
+  const [skillsRefreshSignal, setSkillsRefreshSignal] = useState(0);
   const [activeTab, setActiveTab] = useState<"chat" | "agents">("chat");
   const roomRef = useRef<RoomOut | null>(null);
   roomRef.current = room;
@@ -94,6 +96,7 @@ export default function RoomView({
             "info",
             `Instructions updated for ${agentDisplayName(roomRef.current, event.agent_key)}`,
           );
+          setInstructionsRefreshSignal((n) => n + 1);
           break;
         case "agent_skill_toggled":
           pushToast(
@@ -103,6 +106,7 @@ export default function RoomView({
               event.agent_key,
             )}`,
           );
+          setSkillsRefreshSignal((n) => n + 1);
           break;
         case "drive_linked":
         case "drive_connected":
@@ -298,7 +302,12 @@ export default function RoomView({
       </div>
 
       {activeTab === "agents" && room && (
-        <AgentsSkillsView roomId={roomId} agents={room.agents} />
+        <AgentsSkillsView
+          roomId={roomId}
+          agents={room.agents}
+          instructionsRefreshSignal={instructionsRefreshSignal}
+          skillsRefreshSignal={skillsRefreshSignal}
+        />
       )}
     </div>
   );
