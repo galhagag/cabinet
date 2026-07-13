@@ -21,7 +21,7 @@ class AgentConfigUpdate(BaseModel):
 # --- Rooms ----------------------------------------------------------------
 class RoomCreate(BaseModel):
     customer_name: str = Field(min_length=1, max_length=256)
-    enrichment_prompt: str | None = None
+    enrichment_prompt: str | None = Field(default=None, max_length=8_192)
 
 
 class RoomAgentOut(BaseModel):
@@ -71,7 +71,7 @@ class JoinRequest(BaseModel):
 
 # --- Messages ---------------------------------------------------------------
 class MessageCreate(BaseModel):
-    content: str = Field(min_length=1)
+    content: str = Field(min_length=1, max_length=16_384)
 
 
 class MessageOut(BaseModel):
