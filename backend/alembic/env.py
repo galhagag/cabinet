@@ -13,7 +13,17 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+# `Config.set_main_option`/`get_section` round-trip the value through
+# `configparser`, which treats `%` as the start of a pyformat interpolation
+# token (`%(name)s`). A real Postgres URL commonly carries a URL-encoded
+# password (e.g. `%40` for `@`), so a literal, unescaped `%` here raises
+# `configparser`'s `InterpolationSyntaxError`/`ValueError` before a single
+# migration runs. Escaping to `%%` makes ConfigParser's own interpolation
+# step decode it back to the original `%` on every read (get_main_option,
+# get_section) below.
+config.set_main_option(
+    "sqlalchemy.url", get_settings().database_url.replace("%", "%%")
+)
 target_metadata = Base.metadata
 
 
