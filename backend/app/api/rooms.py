@@ -392,6 +392,7 @@ async def update_room_agent_instructions(
             "type": "agent_instructions_updated",
             "room_id": room_id,
             "agent_key": agent_key,
+            "actor": user_email,
         },
     )
     return _room_agent_detail_out(agent_key, config, room_agent)

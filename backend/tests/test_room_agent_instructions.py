@@ -88,6 +88,7 @@ def test_ws_receives_agent_instructions_updated(client):
         event = drain_until(ws, "agent_instructions_updated")
         assert event["agent_key"] == "fce"
         assert event["room_id"] == room["id"]
+        assert event["actor"]
 
 
 def test_instructions_history_records_old_and_new_text(client):
