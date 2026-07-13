@@ -423,16 +423,26 @@ git commit -m "feat: add per-room per-agent instructions endpoints"
 
 ### Task 2: Per-room skill enable/disable toggle (backend)
 
+> **Post-hoc scope note:** this task's own tests assert on `/compiled-prompt`
+> output (they must, to prove a disabled skill is actually excluded), which
+> means the disabled-skill filtering in `orchestrator.py` had to land in this
+> task rather than Task 3 as originally split — the original split was a
+> plan bug (Task 2's tests depended on behavior Task 3 hadn't built yet).
+> Reconciled after Task 2 was implemented and reviewed: `orchestrator.py`'s
+> `compiled_prompt` filtering is this task's deliverable; Task 3 (below) is
+> corrected to only add per-agent instructions on top of it.
+
 **Files:**
 - Modify: `backend/app/db/models.py` (new `RoomSkillOverride` class, insert after `AgentSkill`)
 - Create: `backend/alembic/versions/b7d4e1a9c3f2_add_room_skill_overrides.py`
 - Modify: `backend/app/schemas.py` (add `SkillToggleUpdate`; add `enabled` field to `SkillOut`)
 - Modify: `backend/app/api/skills.py` (imports, `list_skills`, new `toggle_skill` endpoint)
+- Modify: `backend/app/agents/orchestrator.py` (import `RoomSkillOverride`; `compiled_prompt` filters disabled skills — see post-hoc scope note above)
 - Create: `backend/tests/test_skill_toggle.py`
 
 **Interfaces:**
 - Consumes: `require_room_member`, `get_broker`, `RealtimeBroker`, `AuditLog` (new import into `skills.py`).
-- Produces: `RoomSkillOverride` model and `SkillOut.enabled: bool`, consumed by Task 3 (orchestrator filtering) and Task 5 (frontend types).
+- Produces: `RoomSkillOverride` model, `SkillOut.enabled: bool` (consumed by Task 5, frontend types), and disabled-skill filtering already wired into `orchestrator.compiled_prompt` (Task 3 builds on top of this, it does not reimplement it).
 
 - [ ] **Step 1: Add the `RoomSkillOverride` model**
 
@@ -827,15 +837,15 @@ git commit -m "feat: add room-scoped skill enable/disable toggle"
 
 ---
 
-### Task 3: Prompt layering — instructions + disabled-skill filtering
+### Task 3: Prompt layering — per-agent instructions
 
 **Files:**
 - Modify: `backend/app/agents/prompt_compiler.py` (full file — small)
-- Modify: `backend/app/agents/orchestrator.py:28,296-319` (imports + `compiled_prompt`)
+- Modify: `backend/app/agents/orchestrator.py:28,296-329` (imports + `compiled_prompt`)
 - Create: `backend/tests/test_prompt_layering.py`
 
 **Interfaces:**
-- Consumes: `RoomAgent.instructions` (Task 1), `RoomSkillOverride` (Task 2).
+- Consumes: `RoomAgent.instructions` (Task 1). `RoomSkillOverride`-based disabled-skill filtering already exists in `orchestrator.compiled_prompt` as of Task 2 — this task only adds instructions on top of it, it does not touch the filtering logic.
 - Produces: `compile_system_prompt(baseline, skills=None, enrichment=None, instructions=None)` — the new `instructions` kwarg, consumed nowhere else in this plan (this is the terminal layering step).
 
 - [ ] **Step 1: Write the failing test**
@@ -970,13 +980,60 @@ def parse_mention(content: str) -> str | None:
 
 - [ ] **Step 4: Update `orchestrator.py`**
 
-Edit `backend/app/agents/orchestrator.py`. Change the import on line 28:
+Edit `backend/app/agents/orchestrator.py`. Task 2 already added disabled-skill
+filtering here — the current (line 28) import reads:
+
+```python
+from ..db.models import AgentGlobalConfig, AgentSkill, Message, Room, RoomSkillOverride
+```
+
+Change it to add `RoomAgent`:
 
 ```python
 from ..db.models import AgentGlobalConfig, AgentSkill, Message, Room, RoomAgent, RoomSkillOverride
 ```
 
-Then replace the `compiled_prompt` method (lines 296-319):
+The current `compiled_prompt` method (lines 296-329) reads:
+
+```python
+    async def compiled_prompt(
+        self, session: AsyncSession, room: Room, agent_key: str
+    ) -> str:
+        config = await session.get(AgentGlobalConfig, agent_key)
+        if config is None:
+            raise ValueError(f"unknown agent: {agent_key}")
+
+        result = await session.execute(
+            select(AgentSkill)
+            .where(
+                AgentSkill.agent_key == agent_key,
+                (AgentSkill.room_id == room.id) | (AgentSkill.room_id.is_(None)),
+            )
+            .order_by(AgentSkill.created_at)
+        )
+        all_skills = result.scalars().all()
+
+        # Fetch disabled skill IDs for this room
+        overrides = await session.execute(
+            select(RoomSkillOverride.skill_id).where(RoomSkillOverride.room_id == room.id)
+        )
+        disabled_ids = set(overrides.scalars().all())
+
+        # Filter out disabled skills
+        skills = [
+            SkillSection(name=s.skill_name, content=s.content_text)
+            for s in all_skills
+            if s.id not in disabled_ids
+        ]
+        return compile_system_prompt(
+            baseline=config.system_prompt,
+            skills=skills,
+            enrichment=room.enrichment_prompt,
+        )
+```
+
+Replace it with (adds the `RoomAgent.instructions` fetch and passes it
+through — the skill-filtering block is untouched):
 
 ```python
     async def compiled_prompt(
@@ -993,13 +1050,6 @@ Then replace the `compiled_prompt` method (lines 296-319):
         )
         instructions = room_agent_result.scalar_one_or_none() or ""
 
-        overrides_result = await session.execute(
-            select(RoomSkillOverride.skill_id).where(
-                RoomSkillOverride.room_id == room.id
-            )
-        )
-        disabled_ids = set(overrides_result.scalars().all())
-
         result = await session.execute(
             select(AgentSkill)
             .where(
@@ -1008,9 +1058,18 @@ Then replace the `compiled_prompt` method (lines 296-319):
             )
             .order_by(AgentSkill.created_at)
         )
+        all_skills = result.scalars().all()
+
+        # Fetch disabled skill IDs for this room
+        overrides = await session.execute(
+            select(RoomSkillOverride.skill_id).where(RoomSkillOverride.room_id == room.id)
+        )
+        disabled_ids = set(overrides.scalars().all())
+
+        # Filter out disabled skills
         skills = [
             SkillSection(name=s.skill_name, content=s.content_text)
-            for s in result.scalars().all()
+            for s in all_skills
             if s.id not in disabled_ids
         ]
         return compile_system_prompt(
@@ -1035,7 +1094,7 @@ Expected: PASS — pay particular attention to `test_prompt_enrichment.py` and `
 
 ```bash
 git add backend/app/agents/prompt_compiler.py backend/app/agents/orchestrator.py backend/tests/test_prompt_layering.py
-git commit -m "feat: layer per-agent instructions and disabled skills into compiled prompt"
+git commit -m "feat: layer per-agent instructions into compiled prompt"
 ```
 
 ---
