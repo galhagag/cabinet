@@ -84,6 +84,14 @@ def make_room(client: TestClient, name: str = "Acme Bank", enrichment: str | Non
     return resp.json()
 
 
+def drain_until(ws, event_type: str, limit: int = 40) -> dict:
+    for _ in range(limit):
+        event = ws.receive_json()
+        if event.get("type") == event_type:
+            return event
+    raise AssertionError(f"never received {event_type}")
+
+
 def google_token_handler(calls: list):
     """httpx.MockTransport handler emulating Google's OAuth token endpoint."""
 

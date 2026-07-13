@@ -29,6 +29,24 @@ class RoomAgentOut(BaseModel):
     display_name: str
 
 
+class RoomAgentDetailOut(BaseModel):
+    agent_key: str
+    display_name: str
+    system_prompt: str
+    instructions: str
+
+
+class InstructionsUpdate(BaseModel):
+    instructions: str = ""
+
+
+class AgentUsageOut(BaseModel):
+    agent_key: str
+    message_count: int
+    total_input_tokens: int
+    total_output_tokens: int
+
+
 class RoomLastMessageOut(BaseModel):
     sender_type: str
     sender_name: str
@@ -123,6 +141,11 @@ class SkillOut(BaseModel):
     skill_type: str
     blob_path: str
     created_at: datetime
+    enabled: bool = True
+
+
+class SkillToggleUpdate(BaseModel):
+    enabled: bool
 
 
 # --- Compiled prompt (debug/inspection) ----------------------------------------

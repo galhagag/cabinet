@@ -8,12 +8,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..agents.orchestrator import RealtimeBroker
 from ..agents.profiles import AGENT_KEYS
 from ..db.base import get_session
-from ..db.models import AgentSkill
-from ..schemas import SkillOut
+from ..db.models import AgentSkill, AuditLog, RoomSkillOverride
+from ..schemas import SkillOut, SkillToggleUpdate
 from ..services.skills import SkillsService
 from .deps import get_broker, get_skills_service, require_room_member
 
 router = APIRouter(tags=["skills"])
+
+
+def _skill_out(skill: AgentSkill, *, enabled: bool) -> SkillOut:
+    return SkillOut(
+        id=skill.id,
+        room_id=skill.room_id,
+        agent_key=skill.agent_key,
+        skill_name=skill.skill_name,
+        skill_type=skill.skill_type,
+        blob_path=skill.blob_path,
+        created_at=skill.created_at,
+        enabled=enabled,
+    )
 
 
 @router.post(
@@ -76,7 +89,62 @@ async def list_skills(
         )
         .order_by(AgentSkill.created_at)
     )
-    return [
-        SkillOut.model_validate(skill, from_attributes=True)
-        for skill in result.scalars().all()
-    ]
+    skills = result.scalars().all()
+
+    overrides = await session.execute(
+        select(RoomSkillOverride.skill_id).where(RoomSkillOverride.room_id == room_id)
+    )
+    disabled_ids = set(overrides.scalars().all())
+
+    return [_skill_out(skill, enabled=skill.id not in disabled_ids) for skill in skills]
+
+
+@router.put(
+    "/api/rooms/{room_id}/agents/{agent_key}/skills/{skill_id}",
+    response_model=SkillOut,
+)
+async def toggle_skill(
+    room_id: str,
+    agent_key: str,
+    skill_id: str,
+    payload: SkillToggleUpdate,
+    session: AsyncSession = Depends(get_session),
+    broker: RealtimeBroker = Depends(get_broker),
+    user_email: str = Depends(require_room_member),
+) -> SkillOut:
+    skill = await session.get(AgentSkill, skill_id)
+    if skill is None or skill.agent_key != agent_key:
+        raise HTTPException(status_code=404, detail="skill not found")
+    if skill.room_id is not None and skill.room_id != room_id:
+        raise HTTPException(status_code=404, detail="skill not found")
+
+    existing = await session.get(RoomSkillOverride, (room_id, skill_id))
+    if payload.enabled and existing is not None:
+        await session.delete(existing)
+    elif not payload.enabled and existing is None:
+        session.add(RoomSkillOverride(room_id=room_id, skill_id=skill_id))
+
+    session.add(
+        AuditLog(
+            room_id=room_id,
+            actor=user_email,
+            action="room_skill_toggled",
+            detail={
+                "agent_key": agent_key,
+                "skill_id": skill_id,
+                "enabled": payload.enabled,
+            },
+        )
+    )
+    await session.commit()
+    await broker.publish(
+        room_id,
+        {
+            "type": "agent_skill_toggled",
+            "room_id": room_id,
+            "agent_key": agent_key,
+            "skill_id": skill_id,
+            "enabled": payload.enabled,
+        },
+    )
+    return _skill_out(skill, enabled=payload.enabled)
