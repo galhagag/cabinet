@@ -730,12 +730,13 @@ textarea {
 }
 
 .msg-content {
-  white-space: pre-wrap;
+  white-space: normal;
   word-break: break-word;
 }
 
 .msg-content p {
   margin: 0.3em 0;
+  white-space: pre-wrap;
 }
 
 .msg-content p:first-child {
@@ -754,6 +755,7 @@ textarea {
 
 .msg-content li {
   margin: 0.15em 0;
+  white-space: pre-wrap;
 }
 
 .msg-content h1,
