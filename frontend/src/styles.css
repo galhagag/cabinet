@@ -751,11 +751,21 @@ textarea {
 .msg-content ol {
   margin: 0.3em 0;
   padding-left: 1.4em;
+  white-space: normal;
 }
 
 .msg-content li {
   margin: 0.15em 0;
   white-space: pre-wrap;
+}
+
+.msg-content li > p {
+  margin: 0;
+}
+
+.msg-content li:empty,
+.msg-content p:empty {
+  display: none;
 }
 
 .msg-content h1,
