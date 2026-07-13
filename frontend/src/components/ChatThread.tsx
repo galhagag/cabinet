@@ -2,6 +2,9 @@ import { useEffect, useRef } from "react";
 import { getUserEmail } from "../api";
 import type { MessageOut } from "../types";
 import { Avatar } from "./Avatar";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import type { Components } from "react-markdown";
 
 function bubbleClass(msg: MessageOut, outgoing: boolean): string {
   if (msg.sender_type === "system") return "msg msg-system";
@@ -39,6 +42,19 @@ function TokenUsage({ input, output }: { input: number; output: number }) {
     </div>
   );
 }
+
+const markdownComponents: Components = {
+  a: ({ href, children }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  ),
+  table: ({ children }) => (
+    <div className="md-table-wrap">
+      <table>{children}</table>
+    </div>
+  ),
+};
 
 export default function ChatThread({
   messages,
@@ -85,7 +101,11 @@ export default function ChatThread({
                 )}
                 <span className="msg-time">{formatTime(msg.created_at)}</span>
               </div>
-              <div className="msg-content">{msg.content}</div>
+              <div className="msg-content">
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                  {msg.content}
+                </ReactMarkdown>
+              </div>
               {msg.sender_type === "agent" &&
                 (msg.input_tokens !== null || msg.output_tokens !== null) && (
                   <TokenUsage input={msg.input_tokens ?? 0} output={msg.output_tokens ?? 0} />

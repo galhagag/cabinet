@@ -5,7 +5,7 @@ import { RoomSocket } from "../ws";
 import { pushToast, toastError } from "../toast";
 import ChatThread from "./ChatThread";
 import Composer from "./Composer";
-import LoopBudgetBanner from "./LoopBudgetBanner";
+import PausedBanner from "./PausedBanner";
 import DrivePanel from "./DrivePanel";
 import InviteDialog from "./InviteDialog";
 import SkillUploadDialog from "./SkillUploadDialog";
@@ -256,15 +256,7 @@ export default function RoomView({
         </div>
       </header>
 
-      {room && (
-        <LoopBudgetBanner
-          status={room.status}
-          cyclesUsed={room.cycles_used}
-          cycleLimit={room.cycle_limit}
-          onResume={resume}
-          resuming={resuming}
-        />
-      )}
+      {room && <PausedBanner status={room.status} onResume={resume} resuming={resuming} />}
 
       <ChatThread messages={messages} thinkingAgents={thinkingAgents} />
 
