@@ -9,6 +9,12 @@ sub-item and the handoff-sentinel Low were deliberately deferred to keep this
 slice minimal. Remaining: Stage 2 (H5 per-room serialization) and Stage 3
 (M4 — move the loop off the request path) — not yet started.
 
+**Phase 2 progress:** Stage 2 (H5 — per-room `asyncio.Lock` around both
+`handle_human_message` and `/resume`'s critical sections, plus a Postgres
+advisory-lock defense-in-depth for multi-replica, plus the duplicate-
+`room_resumed` fix) shipped in `fix/orchestrator-room-lock-02-stage2`.
+Remaining: Stage 3 (M4 — move the loop off the request path) — not started.
+
 **Addresses:** C2 (no error handling around the LLM call → stranded room),
 H5 (no per-room loop serialization → interleaved loops), M4 (loop runs inside
 the HTTP request, no background task, no idempotency), plus the handoff-token
