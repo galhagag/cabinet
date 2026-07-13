@@ -129,3 +129,9 @@ class SkillOut(BaseModel):
 class CompiledPromptOut(BaseModel):
     agent_key: str
     compiled_prompt: str
+
+
+# --- Realtime ---------------------------------------------------------------
+class RealtimeTokenOut(BaseModel):
+    mode: str
+    url: str

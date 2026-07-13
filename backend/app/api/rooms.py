@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, selectinload
 
-from ..agents.orchestrator import Orchestrator
+from ..agents.orchestrator import Orchestrator, RealtimeBroker
 from ..agents.profiles import AGENT_KEYS, DISPLAY_NAMES
 from ..config import get_settings
 from ..db.base import get_session
@@ -17,13 +17,14 @@ from ..schemas import (
     CompiledPromptOut,
     InviteCreateOut,
     JoinRequest,
+    RealtimeTokenOut,
     RoomAgentOut,
     RoomCreate,
     RoomLastMessageOut,
     RoomMemberOut,
     RoomOut,
 )
-from .deps import get_current_user_email, get_orchestrator, require_room_member
+from .deps import get_current_user_email, get_broker, get_orchestrator, require_room_member
 
 router = APIRouter(prefix="/api/rooms", tags=["rooms"])
 
@@ -303,3 +304,13 @@ async def get_compiled_prompt(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return CompiledPromptOut(agent_key=agent_key, compiled_prompt=compiled)
+
+
+@router.get("/{room_id}/realtime-token", response_model=RealtimeTokenOut)
+async def realtime_token(
+    room_id: str,
+    broker: RealtimeBroker = Depends(get_broker),
+    user_email: str = Depends(require_room_member),
+) -> RealtimeTokenOut:
+    result = await broker.client_access(room_id, user_email)
+    return RealtimeTokenOut(**result)
