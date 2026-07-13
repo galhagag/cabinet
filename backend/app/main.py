@@ -57,11 +57,17 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
-    origins = [o.strip() for o in settings.allowed_origins.split(",") if o.strip()]
+    origins = settings.cors_origins
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
-        allow_credentials=settings.auth_mode == "entra" and origins != ["*"],
+        # Wildcard origins + credentials is a combination browsers reject —
+        # and, worse, Starlette's CORSMiddleware treats *any* "*" entry as
+        # allow-all and will reflect back an arbitrary request Origin with
+        # Access-Control-Allow-Credentials: true. Guard on membership, not
+        # exact-list equality, so "*" mixed with real origins still disables
+        # credentials.
+        allow_credentials=settings.auth_mode == "entra" and "*" not in origins,
         allow_methods=["*"],
         allow_headers=["*"],
     )

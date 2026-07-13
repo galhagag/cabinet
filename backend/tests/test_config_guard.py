@@ -40,6 +40,14 @@ def test_invalid_env_value_raises():
         ({"admin_emails": ""}, "CABINET_ADMIN_EMAILS"),
         ({"secrets_provider": "env"}, "CABINET_SECRETS_PROVIDER"),
         ({"allowed_origins": "*"}, "CABINET_ALLOWED_ORIGINS"),
+        # A wildcard hiding among other origins must be rejected too — not
+        # just an exact "*" value. Without this, CORSMiddleware still sees
+        # "*" in allow_origins (allow-all) even though the raw string isn't
+        # literally "*".
+        ({"allowed_origins": "https://app.example.com,*"}, "CABINET_ALLOWED_ORIGINS"),
+        ({"allowed_origins": "*, https://app.example.com"}, "CABINET_ALLOWED_ORIGINS"),
+        # Whitespace/commas-only must count as "unset", same as "".
+        ({"admin_emails": " , "}, "CABINET_ADMIN_EMAILS"),
     ],
 )
 def test_prod_missing_required_var_raises(overrides, expected_fragment):
@@ -85,3 +93,29 @@ def test_settings_is_frozen():
     settings = Settings()
     with pytest.raises(Exception):  # dataclasses.FrozenInstanceError
         settings.admin_emails = "hacked@evil.example"
+
+
+@pytest.mark.parametrize(
+    "raw",
+    ["https://app.example.com,*", "*, https://app.example.com", "*"],
+)
+def test_cors_origins_never_allows_credentials_alongside_wildcard(raw):
+    """`allow_credentials` in main.py is keyed off `"*" not in cors_origins`.
+
+    Any `*` in the parsed list — alone or alongside real origins — must
+    disable credentials, since Starlette's CORSMiddleware treats a single
+    "*" entry as allow-all-origins and, combined with allow_credentials,
+    will reflect back an arbitrary request Origin with
+    Access-Control-Allow-Credentials: true (i.e. any origin gets credentialed
+    access, not just a browser-rejected header combo).
+    """
+    settings = Settings(auth_mode="entra", allowed_origins=raw)
+    origins = settings.cors_origins
+    allow_credentials = settings.auth_mode == "entra" and "*" not in origins
+    assert "*" in origins
+    assert allow_credentials is False
+
+
+def test_cors_origins_splits_and_strips():
+    settings = Settings(allowed_origins=" https://a.example.com , https://b.example.com ")
+    assert settings.cors_origins == ["https://a.example.com", "https://b.example.com"]
