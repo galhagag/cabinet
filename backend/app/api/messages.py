@@ -75,6 +75,13 @@ async def resume_room(
     room = await _get_room(session, room_id)
 
     async with orchestrator.room_lock(room_id):
+        # Cross-replica defense-in-depth for the claim below (no-op on
+        # SQLite/tests) — see Orchestrator.acquire_replica_lock. PR #18 wired
+        # this into handle_human_message but missed it here, leaving resume
+        # with zero cross-replica protection even though the in-process
+        # room_lock above only serializes callers within this one process.
+        await orchestrator.acquire_replica_lock(session, room_id)
+
         # Atomic paused→active transition: exactly one of any number of
         # concurrent resume clicks wins the fresh budget; the rest get 409.
         result = await session.execute(

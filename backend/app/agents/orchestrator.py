@@ -55,18 +55,41 @@ class Orchestrator:
     def room_lock(self, room_id: str) -> asyncio.Lock:
         """One lock per room, serializing the entire human-message→loop and
         resume→loop critical sections so two concurrent entry points into the
-        same room's autonomous loop can never both be mid-flight (Design 02
-        Stage 2 / H5). In-process only; on a single replica this is
-        sufficient. Multi-replica also acquires a Postgres advisory lock (see
-        `_acquire_replica_lock`) as defense in depth.
+        same room's autonomous loop can never both be mid-flight *within this
+        process* (Design 02 Stage 2 / H5). In-process only — on a single
+        replica this is sufficient on its own.
+
+        On multiple replicas this lock provides no protection at all (each
+        replica has its own `_room_locks` dict in its own memory); callers
+        additionally take `acquire_replica_lock` at the top of each
+        transaction they want to defend against a same-room collision from
+        another replica. That only covers the specific transaction it's
+        called within — see `acquire_replica_lock` for why it does *not*
+        extend across this whole critical section.
         """
         return self._room_locks[room_id]
 
-    async def _acquire_replica_lock(self, session: AsyncSession, room_id: str) -> None:
-        """No-op on SQLite (tests); on Postgres, holds a transaction-scoped
-        advisory lock so only one replica drives a given room's loop at a
-        time, even though each replica's in-process lock only protects
-        against races within that replica."""
+    async def acquire_replica_lock(self, session: AsyncSession, room_id: str) -> None:
+        """No-op on SQLite (tests); on Postgres, takes a transaction-scoped
+        advisory lock (`pg_advisory_xact_lock`) so a same-keyed call from
+        another replica blocks until this transaction commits or rolls back.
+
+        Caution: this protects only the transaction it's called within, not
+        the caller's whole critical section. `pg_advisory_xact_lock` is
+        released automatically at the *next* commit/rollback on this
+        session — and both `handle_human_message` and `run_autonomous_loop`
+        commit repeatedly (once per turn) before returning. So on a
+        multi-replica deployment this call, taken once at the top of
+        `handle_human_message` or `resume_room`, only guards the initial
+        paused→active/cycle-reset transition against a same-room collision
+        from another replica; it does NOT make the subsequent multi-turn
+        loop mutually exclusive across replicas (that requires either a
+        single long-lived transaction — incompatible with committing each
+        turn as it happens — or a distributed loop-ownership record, i.e.
+        Design 02 Stage 3's outbox `locked_by`/`locked_at`, which does not
+        exist yet). Treat it as defense-in-depth for the claim step only,
+        not a substitute for Stage 3 on a multi-replica deployment.
+        """
         if session.bind is not None and session.bind.dialect.name == "postgresql":
             await session.execute(
                 text("SELECT pg_advisory_xact_lock(hashtext(:room_id))"),
@@ -85,7 +108,7 @@ class Orchestrator:
         in order.
         """
         async with self.room_lock(room.id):
-            await self._acquire_replica_lock(session, room.id)
+            await self.acquire_replica_lock(session, room.id)
             mention = parse_mention(content)
 
             human_msg = Message(
