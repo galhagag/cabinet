@@ -10,6 +10,7 @@ import DrivePanel from "./DrivePanel";
 import InviteDialog from "./InviteDialog";
 import SkillUploadDialog from "./SkillUploadDialog";
 import { AvatarCluster, type AvatarClusterItem } from "./Avatar";
+import AgentsSkillsView from "./AgentsSkillsView";
 
 function agentDisplayName(room: RoomOut | null, agentKey: string): string {
   const found = room?.agents.find((a) => a.agent_key === agentKey);
@@ -34,6 +35,7 @@ export default function RoomView({
   const [resuming, setResuming] = useState(false);
   const [thinkingAgents, setThinkingAgents] = useState<Record<string, string>>({});
   const [driveRefreshSignal, setDriveRefreshSignal] = useState(0);
+  const [activeTab, setActiveTab] = useState<"chat" | "agents">("chat");
   const roomRef = useRef<RoomOut | null>(null);
   roomRef.current = room;
 
@@ -256,16 +258,35 @@ export default function RoomView({
         </div>
       </header>
 
-      {room && <PausedBanner status={room.status} onResume={resume} resuming={resuming} />}
+      <nav className="room-tabs">
+        <button
+          className={`nav-link ${activeTab === "chat" ? "nav-active" : ""}`}
+          onClick={() => setActiveTab("chat")}
+        >
+          Chat
+        </button>
+        <button
+          className={`nav-link ${activeTab === "agents" ? "nav-active" : ""}`}
+          onClick={() => setActiveTab("agents")}
+        >
+          Agents Skills
+        </button>
+      </nav>
 
-      <ChatThread messages={messages} thinkingAgents={thinkingAgents} />
+      <div className="room-chat-pane" style={{ display: activeTab === "chat" ? "contents" : "none" }}>
+        {room && <PausedBanner status={room.status} onResume={resume} resuming={resuming} />}
+        <ChatThread messages={messages} thinkingAgents={thinkingAgents} />
+        <Composer
+          onSend={(content) => void send(content)}
+          sending={sending}
+          disabled={!room}
+          disabledHint={!room ? "Loading room…" : undefined}
+        />
+      </div>
 
-      <Composer
-        onSend={(content) => void send(content)}
-        sending={sending}
-        disabled={!room}
-        disabledHint={!room ? "Loading room…" : undefined}
-      />
+      {activeTab === "agents" && room && (
+        <AgentsSkillsView roomId={roomId} agents={room.agents} />
+      )}
     </div>
   );
 }
