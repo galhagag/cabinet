@@ -22,6 +22,7 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 @router.get("/agents", response_model=list[AgentConfigOut])
 async def list_agent_configs(
     session: AsyncSession = Depends(get_session),
+    _admin: str = Depends(require_admin),
 ) -> list[AgentConfigOut]:
     result = await session.execute(
         select(AgentGlobalConfig).order_by(AgentGlobalConfig.agent_key)
@@ -34,7 +35,9 @@ async def list_agent_configs(
 
 @router.get("/agents/{agent_key}", response_model=AgentConfigOut)
 async def get_agent_config(
-    agent_key: str, session: AsyncSession = Depends(get_session)
+    agent_key: str,
+    session: AsyncSession = Depends(get_session),
+    _admin: str = Depends(require_admin),
 ) -> AgentConfigOut:
     config = await session.get(AgentGlobalConfig, agent_key)
     if config is None:
@@ -95,7 +98,9 @@ async def upload_global_skill(
 
 @router.get("/agents/{agent_key}/skills", response_model=list[SkillOut])
 async def list_global_skills(
-    agent_key: str, session: AsyncSession = Depends(get_session)
+    agent_key: str,
+    session: AsyncSession = Depends(get_session),
+    _admin: str = Depends(require_admin),
 ) -> list[SkillOut]:
     result = await session.execute(
         select(AgentSkill)

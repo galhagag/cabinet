@@ -146,9 +146,16 @@ async def create_room(
 
 
 @router.get("", response_model=list[RoomOut])
-async def list_rooms(session: AsyncSession = Depends(get_session)) -> list[RoomOut]:
+async def list_rooms(
+    session: AsyncSession = Depends(get_session),
+    user_email: str = Depends(get_current_user_email),
+) -> list[RoomOut]:
     result = await session.execute(
-        select(Room).options(selectinload(Room.agents)).order_by(Room.created_at)
+        select(Room)
+        .join(RoomMember, RoomMember.room_id == Room.id)
+        .where(RoomMember.user_email == user_email)
+        .options(selectinload(Room.agents))
+        .order_by(Room.created_at)
     )
     rooms = list(result.scalars().all())
     room_ids = [r.id for r in rooms]
