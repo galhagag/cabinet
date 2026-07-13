@@ -1,6 +1,13 @@
 # Design 01 — Fail-Closed Production Configuration
 
 **Status:** Proposed
+
+**Phase 1 progress:** Shipped in full — `CABINET_ENV` boot guard,
+config-driven CORS, safe int parsing, frozen `Settings`, contained dotenv
+load, and the `require_admin` fail-closed tweak — in
+`fix/config-fail-closed-01`. (The optional `pydantic-settings` follow-up
+noted in "Rollout & risks" was not done.)
+
 **Addresses:** H1 (auth fails open), H2 (admin gate open when allowlist empty),
 M8 (hard-coded wildcard CORS), config Lows (unvalidated int parsing, mutable
 cached `Settings`, import-time `os.environ` mutation).

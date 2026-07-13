@@ -84,14 +84,17 @@ async def require_room_member(
 def require_admin(user_email: str = Depends(get_current_user_email)) -> str:
     """Gate platform-admin surfaces behind CABINET_ADMIN_EMAILS.
 
-    An empty allowlist means open access (development). Production must set
-    the allowlist or replace this with an Entra ID app-role check.
+    An empty allowlist means open access in "dev" auth mode only — an empty
+    allowlist under "entra" auth is refused outright, so a forgotten
+    CABINET_ADMIN_EMAILS can never open the admin surface to every verified
+    user (defense in depth alongside the boot guard in config.py).
     """
+    settings = get_settings()
     allowlist = {
-        e.strip().lower()
-        for e in get_settings().admin_emails.split(",")
-        if e.strip()
+        e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()
     }
+    if settings.auth_mode == "entra" and not allowlist:
+        raise HTTPException(status_code=403, detail="admin access required")
     if allowlist and user_email.lower() not in allowlist:
         raise HTTPException(status_code=403, detail="admin access required")
     return user_email

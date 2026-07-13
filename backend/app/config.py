@@ -32,17 +32,31 @@ def _load_local_dev_env(path: Path = INFRA_ENV_PATH) -> None:
     load_dotenv(path, override=False)
 
 
-_load_local_dev_env()
-
-
 def _env(name: str, default: str = "") -> str:
     return os.environ.get(name, default)
 
 
-@dataclass
+class ConfigError(Exception):
+    """Raised when configuration is invalid or unsafe for the environment."""
+
+
+def _env_int(name: str, default: int, *, min_value: int | None = None) -> int:
+    raw = os.environ.get(name, str(default))
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ConfigError(f"{name} must be an integer, got {raw!r}") from exc
+    if min_value is not None and value < min_value:
+        raise ConfigError(f"{name} must be >= {min_value}, got {value}")
+    return value
+
+
+@dataclass(frozen=True)
 class Settings:
     # --- Core ---------------------------------------------------------
     app_name: str = "Cabinet of Experts"
+    # "dev" | "staging" | "production" — gates validate_for_environment().
+    env: str = field(default_factory=lambda: _env("CABINET_ENV", "dev"))
     database_url: str = field(
         default_factory=lambda: _env(
             "CABINET_DATABASE_URL", "sqlite+aiosqlite:///./cabinet.db"
@@ -89,17 +103,17 @@ class Settings:
         )
     )
     agent_max_tokens: int = field(
-        default_factory=lambda: int(_env("CABINET_AGENT_MAX_TOKENS", "2048"))
+        default_factory=lambda: _env_int("CABINET_AGENT_MAX_TOKENS", 2048, min_value=1)
     )
     # How many recent messages are compiled into an agent's context window.
     history_window: int = field(
-        default_factory=lambda: int(_env("CABINET_HISTORY_WINDOW", "40"))
+        default_factory=lambda: _env_int("CABINET_HISTORY_WINDOW", 40, min_value=1)
     )
 
     # --- Loop control ---------------------------------------------------
     # Hard product default: max autonomous agent-to-agent turns before pause.
     default_cycle_limit: int = field(
-        default_factory=lambda: int(_env("CABINET_CYCLE_LIMIT", "6"))
+        default_factory=lambda: _env_int("CABINET_CYCLE_LIMIT", 6, min_value=1)
     )
 
     # --- Providers ------------------------------------------------------
@@ -152,7 +166,7 @@ class Settings:
 
     # --- Invites -----------------------------------------------------------
     invite_ttl_hours: int = field(
-        default_factory=lambda: int(_env("CABINET_INVITE_TTL_HOURS", "168"))
+        default_factory=lambda: _env_int("CABINET_INVITE_TTL_HOURS", 168, min_value=1)
     )
 
     # --- Authorization -------------------------------------------------------
@@ -175,10 +189,58 @@ class Settings:
     entra_client_id: str = field(
         default_factory=lambda: _env("CABINET_ENTRA_CLIENT_ID", "")
     )
+    # Comma-separated CORS origins. "*" is the dev default; production must
+    # set this to the real frontend origin(s) — enforced below.
+    allowed_origins: str = field(
+        default_factory=lambda: _env("CABINET_ALLOWED_ORIGINS", "*")
+    )
+
+    def validate_for_environment(self) -> None:
+        """Refuse to boot with an unsafe config outside dev.
+
+        Raising here (called once from the FastAPI lifespan, before any
+        provider is built) turns "deployed, forgot an env var" into a loud
+        crash-loop instead of silent identity impersonation or an open admin
+        surface — see H1/H2/M8 in the 2026-07-12 review.
+        """
+        if self.env not in ("dev", "staging", "production"):
+            raise ConfigError(
+                f"CABINET_ENV must be one of dev|staging|production, got {self.env!r}"
+            )
+        if self.env == "dev":
+            return
+        if self.auth_mode != "entra":
+            raise ConfigError(
+                "CABINET_AUTH_MODE must be 'entra' when CABINET_ENV is staging/production"
+            )
+        if not self.entra_tenant_id:
+            raise ConfigError(
+                "CABINET_ENTRA_TENANT_ID must be set when CABINET_ENV is staging/production"
+            )
+        if not self.entra_client_id:
+            raise ConfigError(
+                "CABINET_ENTRA_CLIENT_ID must be set when CABINET_ENV is staging/production"
+            )
+        if not self.admin_emails:
+            raise ConfigError(
+                "CABINET_ADMIN_EMAILS must be set when CABINET_ENV is staging/production"
+            )
+        if self.secrets_provider != "azure_keyvault" and _env("CABINET_ALLOW_ENV_SECRETS") != "1":
+            raise ConfigError(
+                "CABINET_SECRETS_PROVIDER must be 'azure_keyvault' when CABINET_ENV is "
+                "staging/production (set CABINET_ALLOW_ENV_SECRETS=1 to override)"
+            )
+        if not self.allowed_origins or self.allowed_origins == "*":
+            raise ConfigError(
+                "CABINET_ALLOWED_ORIGINS must be a non-wildcard value when CABINET_ENV "
+                "is staging/production"
+            )
 
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
+    if os.environ.get("CABINET_SKIP_LOCAL_DOTENV") != "1":
+        _load_local_dev_env()
     return Settings()
 
 

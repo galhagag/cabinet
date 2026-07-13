@@ -30,3 +30,18 @@ def test_update_baseline_prompt(client):
 def test_update_unknown_agent_404(client):
     resp = client.put("/api/admin/agents/nope", json={"system_prompt": "x"})
     assert resp.status_code == 404
+
+
+def test_admin_denied_when_entra_mode_and_allowlist_empty(entra_client):
+    from .conftest import install_mock_entra, make_entra_keypair, make_entra_token
+
+    private_key, jwks = make_entra_keypair()
+    install_mock_entra(entra_client.app, jwks)
+    token = make_entra_token(private_key)
+
+    resp = entra_client.put(
+        "/api/admin/agents/fce",
+        json={"system_prompt": "hijacked"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 403

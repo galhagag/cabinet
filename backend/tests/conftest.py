@@ -24,6 +24,7 @@ def _configure_env(tmp_path, monkeypatch, db_name: str) -> None:
     monkeypatch.setenv("CABINET_BLOB_PROVIDER", "local")
     monkeypatch.setenv("CABINET_LOCAL_BLOB_ROOT", str(tmp_path / "blob"))
     monkeypatch.setenv("CABINET_REALTIME_PROVIDER", "inprocess")
+    monkeypatch.setenv("CABINET_SKIP_LOCAL_DOTENV", "1")
 
 
 @pytest.fixture()
