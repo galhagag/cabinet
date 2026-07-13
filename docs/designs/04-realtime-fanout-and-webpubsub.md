@@ -1,6 +1,17 @@
 # Design 04 — Realtime Fan-out & Web PubSub
 
 **Status:** Proposed
+
+**Phase 2 progress:** M5 (per-connection queue + writer task, drop-oldest +
+desync marker), M6 (lock-guarded client construction, publish swallows
+transport errors), and the WS lifecycle Lows (try/finally cleanup, empty
+room-key eviction) shipped in full in `fix/realtime-fanout-webpubsub-04`. H6
+(the `/realtime-token` negotiate endpoint + `client_access` on both brokers)
+is implemented but **unverified against a real Azure Web PubSub resource** —
+per this design's own rollout note, that requires a staging validation pass
+before prod realtime can be considered trustworthy. The token-in-query-string
+Low is unchanged (still applies to the dev in-process WS path).
+
 **Addresses:** H6 (production realtime is silently dead), M5 (sequential
 `send_json` blocks the loop on one slow client), M6 (`AzureWebPubSubBroker`
 error handling + client-construction race), and the WS lifecycle Lows (only
