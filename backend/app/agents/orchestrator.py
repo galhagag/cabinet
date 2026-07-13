@@ -25,7 +25,7 @@ from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import Settings
-from ..db.models import AgentGlobalConfig, AgentSkill, Message, Room, RoomSkillOverride
+from ..db.models import AgentGlobalConfig, AgentSkill, Message, Room, RoomAgent, RoomSkillOverride
 from .foundry_client import ChatTurn, LLMBackend, LLMError
 from .profiles import AGENT_KEYS, DATA_EXPERT_KEY, DISPLAY_NAMES, FCE_KEY
 from .prompt_compiler import SkillSection, compile_system_prompt, parse_mention
@@ -300,6 +300,13 @@ class Orchestrator:
         if config is None:
             raise ValueError(f"unknown agent: {agent_key}")
 
+        room_agent_result = await session.execute(
+            select(RoomAgent.instructions).where(
+                RoomAgent.room_id == room.id, RoomAgent.agent_key == agent_key
+            )
+        )
+        instructions = room_agent_result.scalar_one_or_none() or ""
+
         result = await session.execute(
             select(AgentSkill)
             .where(
@@ -326,6 +333,7 @@ class Orchestrator:
             baseline=config.system_prompt,
             skills=skills,
             enrichment=room.enrichment_prompt,
+            instructions=instructions,
         )
 
     async def _history_as_turns(
