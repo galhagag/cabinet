@@ -36,6 +36,11 @@ def _env(name: str, default: str = "") -> str:
     return os.environ.get(name, default)
 
 
+def _split_csv(value: str) -> list[str]:
+    """Parse a comma-separated env value, dropping empty/whitespace entries."""
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
 class ConfigError(Exception):
     """Raised when configuration is invalid or unsafe for the environment."""
 
@@ -195,6 +200,15 @@ class Settings:
         default_factory=lambda: _env("CABINET_ALLOWED_ORIGINS", "*")
     )
 
+    @property
+    def cors_origins(self) -> list[str]:
+        """Parsed CABINET_ALLOWED_ORIGINS — single source of truth for both
+        the boot guard below and the CORS middleware in main.py, so a
+        wildcard hiding among other origins (e.g. "https://a.com,*") can't
+        pass one parser and slip past the other.
+        """
+        return _split_csv(self.allowed_origins)
+
     def validate_for_environment(self) -> None:
         """Refuse to boot with an unsafe config outside dev.
 
@@ -221,7 +235,7 @@ class Settings:
             raise ConfigError(
                 "CABINET_ENTRA_CLIENT_ID must be set when CABINET_ENV is staging/production"
             )
-        if not self.admin_emails:
+        if not _split_csv(self.admin_emails):
             raise ConfigError(
                 "CABINET_ADMIN_EMAILS must be set when CABINET_ENV is staging/production"
             )
@@ -230,7 +244,12 @@ class Settings:
                 "CABINET_SECRETS_PROVIDER must be 'azure_keyvault' when CABINET_ENV is "
                 "staging/production (set CABINET_ALLOW_ENV_SECRETS=1 to override)"
             )
-        if not self.allowed_origins or self.allowed_origins == "*":
+        # Reject "*" anywhere in the list, not just an exact "*" value — a
+        # value like "https://app.example.com,*" would otherwise sail past
+        # an exact-match check yet still make CORSMiddleware treat every
+        # origin as allowed (allow_all_origins = "*" in allow_origins).
+        origins = self.cors_origins
+        if not origins or "*" in origins:
             raise ConfigError(
                 "CABINET_ALLOWED_ORIGINS must be a non-wildcard value when CABINET_ENV "
                 "is staging/production"
