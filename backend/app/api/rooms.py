@@ -23,6 +23,7 @@ from ..db.models import (
     RoomMember,
 )
 from ..schemas import (
+    AgentUsageOut,
     CompiledPromptOut,
     InstructionsUpdate,
     InviteCreateOut,
@@ -388,6 +389,39 @@ async def update_room_agent_instructions(
         },
     )
     return _room_agent_detail_out(agent_key, config, room_agent)
+
+
+@router.get(
+    "/{room_id}/agents/{agent_key}/usage",
+    response_model=AgentUsageOut,
+)
+async def get_agent_usage(
+    room_id: str,
+    agent_key: str,
+    session: AsyncSession = Depends(get_session),
+    _member: str = Depends(require_room_member),
+) -> AgentUsageOut:
+    if agent_key not in AGENT_KEYS:
+        raise HTTPException(status_code=400, detail=f"unknown agent: {agent_key}")
+
+    result = await session.execute(
+        select(
+            func.count(Message.id),
+            func.coalesce(func.sum(Message.input_tokens), 0),
+            func.coalesce(func.sum(Message.output_tokens), 0),
+        ).where(
+            Message.room_id == room_id,
+            Message.agent_key == agent_key,
+            Message.sender_type == "agent",
+        )
+    )
+    message_count, total_input_tokens, total_output_tokens = result.one()
+    return AgentUsageOut(
+        agent_key=agent_key,
+        message_count=message_count,
+        total_input_tokens=total_input_tokens,
+        total_output_tokens=total_output_tokens,
+    )
 
 
 @router.get(

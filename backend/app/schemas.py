@@ -40,6 +40,13 @@ class InstructionsUpdate(BaseModel):
     instructions: str = ""
 
 
+class AgentUsageOut(BaseModel):
+    agent_key: str
+    message_count: int
+    total_input_tokens: int
+    total_output_tokens: int
+
+
 class RoomLastMessageOut(BaseModel):
     sender_type: str
     sender_name: str
