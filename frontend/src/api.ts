@@ -8,6 +8,7 @@ import type {
   GDriveStatusOut,
   InstructionsHistoryEntryOut,
   InviteCreateOut,
+  MessageEditResult,
   MessageOut,
   PostMessageResult,
   RealtimeTokenOut,
@@ -163,6 +164,12 @@ export const listMessages = (roomId: string) =>
 
 export const postMessage = (roomId: string, content: string) =>
   request<PostMessageResult>(`/api/rooms/${roomId}/messages`, {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  });
+
+export const editMessage = (roomId: string, messageId: string, content: string) =>
+  request<MessageEditResult>(`/api/rooms/${roomId}/messages/${messageId}/edit`, {
     method: "POST",
     body: JSON.stringify({ content }),
   });

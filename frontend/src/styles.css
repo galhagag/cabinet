@@ -728,6 +728,11 @@ textarea {
   border: 1px solid var(--border);
 }
 
+.msg-superseded {
+  opacity: 0.58;
+  filter: saturate(0.72);
+}
+
 .msg-outgoing {
   background: var(--human-bg);
   border-color: var(--border-strong);
@@ -771,6 +776,19 @@ textarea {
   margin-bottom: 0.25rem;
 }
 
+.msg-badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 0.05rem 0.42rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
 .msg-sender {
   font-weight: 700;
   font-size: 0.85rem;
@@ -782,9 +800,42 @@ textarea {
   color: var(--text-muted);
 }
 
+.msg-edit-btn {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 0;
+  cursor: pointer;
+}
+
+.msg-edit-btn:hover {
+  color: var(--accent-hover);
+}
+
 .msg-content {
   white-space: normal;
   word-break: break-word;
+}
+
+.msg-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.msg-edit-textarea {
+  width: 100%;
+  min-height: 5.5rem;
+  resize: vertical;
+}
+
+.msg-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
 }
 
 .msg-content p {

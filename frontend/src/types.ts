@@ -99,6 +99,10 @@ export interface MessageCreate {
   content: string;
 }
 
+export interface MessageEdit {
+  content: string;
+}
+
 export interface MessageOut {
   id: string;
   room_id: string;
@@ -106,11 +110,13 @@ export interface MessageOut {
   sender_name: string;
   agent_key: string | null;
   mention_target: string | null;
+  edit_of_id: string | null;
   cycle_number: number | null;
   content: string;
   input_tokens: number | null;
   output_tokens: number | null;
   created_at: string;
+  superseded_at: string | null;
 }
 
 export interface PostMessageResult {
@@ -118,6 +124,10 @@ export interface PostMessageResult {
   room_status: RoomStatus;
   cycles_used: number;
   cycle_limit: number;
+}
+
+export interface MessageEditResult extends PostMessageResult {
+  superseded_message_ids: string[];
 }
 
 // --- Google Drive -------------------------------------------------------------
@@ -183,6 +193,14 @@ export interface WsMessageCreated {
   message: MessageOut;
 }
 
+export interface WsMessageEdited {
+  type: "message_edited";
+  room_id: string;
+  message_id: string;
+  replacement_message_id: string | null;
+  superseded_message_ids: string[];
+}
+
 export interface WsAgentThinking {
   type: "agent_thinking";
   agent_key: string;
@@ -236,6 +254,7 @@ export interface WsDesync {
 
 export type RoomWsEvent =
   | WsMessageCreated
+  | WsMessageEdited
   | WsAgentThinking
   | WsRoomPaused
   | WsRoomResumed

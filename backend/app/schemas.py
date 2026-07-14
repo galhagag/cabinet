@@ -99,6 +99,10 @@ class MessageCreate(BaseModel):
     content: str = Field(min_length=1, max_length=16_384)
 
 
+class MessageEdit(BaseModel):
+    content: str = Field(min_length=1, max_length=16_384)
+
+
 class MessageOut(BaseModel):
     id: str
     room_id: str
@@ -106,11 +110,13 @@ class MessageOut(BaseModel):
     sender_name: str
     agent_key: str | None
     mention_target: str | None
+    edit_of_id: str | None = None
     cycle_number: int | None
     content: str
     input_tokens: int | None = None
     output_tokens: int | None = None
     created_at: datetime
+    superseded_at: datetime | None = None
 
 
 class PostMessageResult(BaseModel):
@@ -118,6 +124,10 @@ class PostMessageResult(BaseModel):
     room_status: str
     cycles_used: int
     cycle_limit: int
+
+
+class MessageEditResult(PostMessageResult):
+    superseded_message_ids: list[str]
 
 
 # --- Google Drive -------------------------------------------------------------
