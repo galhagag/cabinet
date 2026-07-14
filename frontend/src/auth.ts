@@ -18,6 +18,7 @@ const TENANT_ID = import.meta.env.VITE_ENTRA_TENANT_ID as string | undefined;
 const CLIENT_ID = import.meta.env.VITE_ENTRA_CLIENT_ID as string | undefined;
 // The API app registration's exposed scope, e.g. "api://<api-client-id>/access_as_user".
 const API_SCOPE = import.meta.env.VITE_ENTRA_API_SCOPE as string | undefined;
+const PENDING_INVITE_TOKEN_KEY = "cabinet_pending_invite_token";
 
 let msal: PublicClientApplication | null = null;
 let initPromise: Promise<void> | null = null;
@@ -72,8 +73,20 @@ export function getActiveAccount(): AccountInfo | null {
   return getMsal().getActiveAccount();
 }
 
+export function consumePendingInviteToken(): string | null {
+  const token = window.sessionStorage.getItem(PENDING_INVITE_TOKEN_KEY);
+  if (token) {
+    window.sessionStorage.removeItem(PENDING_INVITE_TOKEN_KEY);
+  }
+  return token;
+}
+
 export async function signIn(): Promise<void> {
   const { scope } = requireConfig();
+  const token = new URLSearchParams(window.location.search).get("token");
+  if (token) {
+    window.sessionStorage.setItem(PENDING_INVITE_TOKEN_KEY, token);
+  }
   await getMsal().loginRedirect({ scopes: [scope] });
 }
 

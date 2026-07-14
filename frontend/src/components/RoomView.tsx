@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getRoom, getUserEmail, listMembers, listMessages, postMessage, resumeRoom } from "../api";
-import type { MessageOut, RoomMemberOut, RoomOut, RoomWsEvent } from "../types";
+import type {
+  MessageOut,
+  RoomConnectionState,
+  RoomMemberOut,
+  RoomOut,
+  RoomWsEvent,
+} from "../types";
 import { RoomSocket } from "../ws";
 import { pushToast, toastError } from "../toast";
 import { getActiveAccount, isEntraAuth } from "../auth";
@@ -38,6 +44,7 @@ export default function RoomView({
   const [instructionsRefreshSignal, setInstructionsRefreshSignal] = useState(0);
   const [skillsRefreshSignal, setSkillsRefreshSignal] = useState(0);
   const [activeTab, setActiveTab] = useState<"chat" | "agents">("chat");
+  const [connectionState, setConnectionState] = useState<RoomConnectionState>("connecting");
   const roomRef = useRef<RoomOut | null>(null);
   roomRef.current = room;
 
@@ -51,6 +58,23 @@ export default function RoomView({
       );
     });
   }, []);
+
+  const refreshRoom = useCallback(() => {
+    getRoom(roomId)
+      .then(setRoom)
+      .catch(() => {
+        // header refresh is best-effort
+      });
+  }, [roomId]);
+
+  const resyncRoomState = useCallback(() => {
+    listMessages(roomId)
+      .then(mergeMessages)
+      .catch(() => {
+        // message resync is best-effort
+      });
+    refreshRoom();
+  }, [mergeMessages, refreshRoom, roomId]);
 
   const handleWsEvent = useCallback(
     (event: RoomWsEvent) => {
@@ -117,9 +141,17 @@ export default function RoomView({
         case "drive_connected":
           setDriveRefreshSignal((n) => n + 1);
           break;
+        case "desync":
+          void listMessages(roomId)
+            .then(mergeMessages)
+            .catch(() => {
+              // message resync is best-effort
+            });
+          refreshRoom();
+          break;
       }
     },
-    [mergeMessages],
+    [mergeMessages, refreshRoom, roomId],
   );
 
   // Initial load.
@@ -133,7 +165,7 @@ export default function RoomView({
       .then(([r, msgs]) => {
         if (cancelled) return;
         setRoom(r);
-        setMessages(msgs);
+        mergeMessages(msgs);
       })
       .catch((err) => {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : String(err));
@@ -153,9 +185,9 @@ export default function RoomView({
   // Live socket.
   useEffect(() => {
     const socket = new RoomSocket();
-    socket.connect(roomId, handleWsEvent);
+    socket.connect(roomId, handleWsEvent, resyncRoomState, setConnectionState);
     return () => socket.close();
-  }, [roomId, handleWsEvent]);
+  }, [roomId, handleWsEvent, resyncRoomState]);
 
   // Mirror status + last message up to the sidebar so the chat list stays live.
   useEffect(() => {
@@ -177,15 +209,7 @@ export default function RoomView({
     });
   }, [room, messages, roomId, onActivity]);
 
-  const refreshRoom = useCallback(() => {
-    getRoom(roomId)
-      .then(setRoom)
-      .catch(() => {
-        // header refresh is best-effort
-      });
-  }, [roomId]);
-
-  const send = async (content: string) => {
+  const send = async (content: string): Promise<boolean> => {
     setSending(true);
     try {
       const result = await postMessage(roomId, content);
@@ -200,8 +224,10 @@ export default function RoomView({
             }
           : prev,
       );
+      return true;
     } catch (err) {
       toastError(err, "Failed to send message");
+      return false;
     } finally {
       setSending(false);
       setThinkingAgents({});
@@ -252,6 +278,14 @@ export default function RoomView({
         " · ",
       )
     : "";
+  const connectionLabel =
+    connectionState === "live"
+      ? "Live"
+      : connectionState === "reconnecting"
+        ? "Reconnecting"
+        : connectionState === "offline"
+          ? "Offline"
+          : "Connecting";
 
   return (
     <div className="room-view">
@@ -275,6 +309,7 @@ export default function RoomView({
           </div>
         </div>
         <div className="room-header-actions">
+          <span className={`connection-pill connection-pill-${connectionState}`}>{connectionLabel}</span>
           <DrivePanel roomId={roomId} refreshSignal={driveRefreshSignal} />
           <InviteDialog roomId={roomId} />
         </div>
@@ -299,7 +334,7 @@ export default function RoomView({
         {room && <PausedBanner status={room.status} onResume={resume} resuming={resuming} />}
         <ChatThread messages={messages} thinkingAgents={thinkingAgents} />
         <Composer
-          onSend={(content) => void send(content)}
+          onSend={send}
           sending={sending}
           disabled={!room}
           disabledHint={!room ? "Loading room…" : undefined}

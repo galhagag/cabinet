@@ -11,7 +11,7 @@ export default function Composer({
   disabled,
   disabledHint,
 }: {
-  onSend: (content: string) => void;
+  onSend: (content: string) => Promise<boolean>;
   sending: boolean;
   disabled?: boolean;
   disabledHint?: string;
@@ -23,10 +23,11 @@ export default function Composer({
 
   const blocked = sending || !!disabled;
 
-  const send = () => {
+  const send = async () => {
     const content = value.trim();
     if (!content || blocked) return;
-    onSend(content);
+    const sent = await onSend(content);
+    if (!sent) return;
     setValue("");
     setPickerOpen(false);
   };
@@ -73,7 +74,7 @@ export default function Composer({
     }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      send();
+      void send();
     }
   };
 

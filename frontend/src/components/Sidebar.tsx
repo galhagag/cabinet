@@ -3,6 +3,9 @@ import { createRoom } from "../api";
 import type { RoomOut } from "../types";
 import { toastError } from "../toast";
 import { AvatarCluster, type AvatarClusterItem } from "./Avatar";
+import Modal from "./Modal";
+
+const NEW_ROOM_DIALOG_TITLE_ID = "new-room-dialog-title";
 
 function formatRelativeTime(iso: string): string {
   const d = new Date(iso);
@@ -64,14 +67,7 @@ function NewRoomModal({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>New Cabinet Room</h3>
-          <button className="modal-close" onClick={onClose} aria-label="Close">
-            ×
-          </button>
-        </div>
+    <Modal title="New Cabinet Room" titleId={NEW_ROOM_DIALOG_TITLE_ID} onClose={onClose}>
         <form onSubmit={handleCreate} className="new-room-form">
           <label className="field">
             <span className="field-label">Customer name</span>
@@ -98,8 +94,7 @@ function NewRoomModal({
             {creating ? "Creating…" : "Create room"}
           </button>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

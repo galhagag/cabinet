@@ -1,8 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getUserEmail } from "../api";
+import { getActiveAccount, isEntraAuth } from "../auth";
 import type { MessageOut } from "../types";
 import { Avatar } from "./Avatar";
 import ReactMarkdown from "react-markdown";
+import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
 
@@ -63,23 +65,56 @@ export default function ChatThread({
   messages: MessageOut[];
   thinkingAgents: Record<string, string>;
 }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const shouldStickToBottomRef = useRef(true);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const thinking = Object.entries(thinkingAgents);
-  const currentUser = getUserEmail();
+  const currentUser = (
+    isEntraAuth ? getActiveAccount()?.username ?? "" : getUserEmail()
+  )
+    .trim()
+    .toLowerCase();
+
+  const syncScrollState = () => {
+    const container = containerRef.current;
+    if (!container) return;
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    const nearBottom = distanceFromBottom < 72;
+    shouldStickToBottomRef.current = nearBottom;
+    setShowJumpToLatest(!nearBottom);
+  };
+
+  const jumpToLatest = () => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    shouldStickToBottomRef.current = true;
+    setShowJumpToLatest(false);
+  };
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    syncScrollState();
+  }, []);
+
+  useEffect(() => {
+    if (!shouldStickToBottomRef.current) {
+      setShowJumpToLatest(true);
+      return;
+    }
+    jumpToLatest();
   }, [messages.length, thinking.length]);
 
   return (
-    <div className="chat-thread">
+    <div className="chat-thread-wrap">
+      <div className="chat-thread" ref={containerRef} onScroll={syncScrollState}>
       {messages.length === 0 && (
         <div className="muted chat-empty">
           No messages yet. Say hello to the Cabinet — try mentioning @DataExpert or @FCE.
         </div>
       )}
       {messages.map((msg) => {
-        const outgoing = msg.sender_type === "human" && msg.sender_name === currentUser;
+        const outgoing =
+          msg.sender_type === "human" &&
+          msg.sender_name.trim().toLowerCase() === currentUser;
         const showAvatar = msg.sender_type !== "system" && !outgoing;
         return (
           <div key={msg.id} className={rowClass(msg, outgoing)}>
@@ -94,15 +129,10 @@ export default function ChatThread({
             <div className={bubbleClass(msg, outgoing)}>
               <div className="msg-header">
                 <span className="msg-sender">{msg.sender_name}</span>
-                {msg.cycle_number !== null && (
-                  <span className="cycle-chip" title="Autonomous cycle number">
-                    cycle {msg.cycle_number}
-                  </span>
-                )}
                 <span className="msg-time">{formatTime(msg.created_at)}</span>
               </div>
               <div className="msg-content">
-                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
                   {msg.content}
                 </ReactMarkdown>
               </div>
@@ -130,6 +160,12 @@ export default function ChatThread({
         </div>
       ))}
       <div ref={bottomRef} />
+      </div>
+      {showJumpToLatest && (
+        <button className="chat-jump-to-latest" onClick={jumpToLatest}>
+          Jump to latest
+        </button>
+      )}
     </div>
   );
 }

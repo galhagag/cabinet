@@ -152,6 +152,7 @@ class AzureWebPubSubBroker:
                 f"webpubsub.joinLeaveGroup.{room_id}",
                 f"webpubsub.sendToGroup.{room_id}",
             ],
+            groups=[room_id],
         )
         return {"mode": "webpubsub", "url": result["url"]}
 

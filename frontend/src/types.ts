@@ -169,6 +169,14 @@ export interface CompiledPromptOut {
   compiled_prompt: string;
 }
 
+// --- Realtime -----------------------------------------------------------------
+export interface RealtimeTokenOut {
+  mode: string;
+  url: string;
+}
+
+export type RoomConnectionState = "connecting" | "live" | "reconnecting" | "offline";
+
 // --- WebSocket events ------------------------------------------------------------
 export interface WsMessageCreated {
   type: "message_created";
@@ -221,6 +229,11 @@ export interface WsDriveConnected {
   type: "drive_connected";
 }
 
+export interface WsDesync {
+  type: "desync";
+  reason: string;
+}
+
 export type RoomWsEvent =
   | WsMessageCreated
   | WsAgentThinking
@@ -230,4 +243,5 @@ export type RoomWsEvent =
   | WsAgentInstructionsUpdated
   | WsAgentSkillToggled
   | WsDriveLinked
-  | WsDriveConnected;
+  | WsDriveConnected
+  | WsDesync;

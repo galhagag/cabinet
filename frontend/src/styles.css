@@ -594,6 +594,37 @@ textarea {
   flex-wrap: wrap;
 }
 
+.connection-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.connection-pill-connecting {
+  color: var(--accent);
+  background: rgba(56, 136, 255, 0.12);
+  border-color: rgba(56, 136, 255, 0.35);
+}
+
+.connection-pill-live {
+  color: var(--ok);
+  background: rgba(31, 157, 85, 0.12);
+  border-color: rgba(31, 157, 85, 0.35);
+}
+
+.connection-pill-reconnecting,
+.connection-pill-offline {
+  color: var(--warn);
+  background: rgba(200, 134, 11, 0.12);
+  border-color: rgba(200, 134, 11, 0.35);
+}
+
 /* ---- room tabs (Chat / Agents Skills) ------------------------------------- */
 .room-tabs {
   display: flex;
@@ -620,9 +651,14 @@ textarea {
 }
 
 /* ---- chat thread ------------------------------------------------------------ */
-.chat-thread {
+.chat-thread-wrap {
+  position: relative;
   flex: 1;
   min-height: 240px;
+}
+
+.chat-thread {
+  height: 100%;
   overflow-y: auto;
   background: var(--bg-raised);
   border: 1px solid var(--border);
@@ -636,6 +672,26 @@ textarea {
 .chat-empty {
   margin: auto;
   text-align: center;
+}
+
+.chat-jump-to-latest {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  border: 1px solid var(--accent);
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--accent-hover);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  padding: 0.45rem 0.75rem;
+  border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(15, 27, 53, 0.16);
+  cursor: pointer;
+}
+
+.chat-jump-to-latest:hover {
+  background: #fff;
 }
 
 .msg-row {
@@ -726,17 +782,6 @@ textarea {
   color: var(--text-muted);
 }
 
-.cycle-chip {
-  font-size: 0.68rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  padding: 0 0.45rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
 .msg-content {
   white-space: normal;
   word-break: break-word;
@@ -744,7 +789,6 @@ textarea {
 
 .msg-content p {
   margin: 0.3em 0;
-  white-space: pre-wrap;
 }
 
 .msg-content p:first-child {
@@ -764,7 +808,6 @@ textarea {
 
 .msg-content li {
   margin: 0.15em 0;
-  white-space: pre-wrap;
 }
 
 .msg-content li > p {
@@ -997,11 +1040,6 @@ textarea {
   align-items: baseline;
   gap: 1rem;
   flex-wrap: wrap;
-}
-
-.agent-key-label {
-  margin-left: 0.5rem;
-  font-weight: 400;
 }
 
 .prompt-editor {
