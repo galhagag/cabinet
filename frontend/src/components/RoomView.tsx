@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getRoom, getUserEmail, listMembers, listMessages, postMessage, resumeRoom } from "../api";
 import type {
+  RoomConnectionStatus,
   MessageOut,
-  RoomConnectionState,
   RoomMemberOut,
   RoomOut,
   RoomWsEvent,
@@ -44,7 +44,12 @@ export default function RoomView({
   const [instructionsRefreshSignal, setInstructionsRefreshSignal] = useState(0);
   const [skillsRefreshSignal, setSkillsRefreshSignal] = useState(0);
   const [activeTab, setActiveTab] = useState<"chat" | "agents">("chat");
-  const [connectionState, setConnectionState] = useState<RoomConnectionState>("connecting");
+  const [connectionStatus, setConnectionStatus] = useState<RoomConnectionStatus>({
+    state: "connecting",
+    attempts: 0,
+    maxAttempts: 5,
+    detail: "Connecting to live room updates…",
+  });
   const roomRef = useRef<RoomOut | null>(null);
   const socketRef = useRef<RoomSocket | null>(null);
   roomRef.current = room;
@@ -187,7 +192,7 @@ export default function RoomView({
   useEffect(() => {
     const socket = new RoomSocket();
     socketRef.current = socket;
-    socket.connect(roomId, handleWsEvent, resyncRoomState, setConnectionState);
+    socket.connect(roomId, handleWsEvent, resyncRoomState, setConnectionStatus);
     return () => {
       if (socketRef.current === socket) {
         socketRef.current = null;
@@ -266,7 +271,6 @@ export default function RoomView({
   };
 
   const retryConnection = () => {
-    setConnectionState("connecting");
     socketRef.current?.reconnectNow();
   };
 
@@ -290,6 +294,7 @@ export default function RoomView({
         " · ",
       )
     : "";
+  const connectionState = connectionStatus.state;
   const connectionLabel =
     connectionState === "live"
       ? "Live"
@@ -329,16 +334,33 @@ export default function RoomView({
 
       {connectionState === "offline" && (
         <div className="connection-alert connection-alert-offline">
-          <span>Live updates are offline. The room may be stale until you reconnect.</span>
-          <button className="btn btn-small" onClick={retryConnection}>
-            Reconnect
-          </button>
+          <div className="connection-alert-body">
+            <strong className="connection-alert-title">Live updates are offline.</strong>
+            <span className="connection-alert-detail">{connectionStatus.detail}</span>
+          </div>
+          <div className="connection-alert-actions">
+            <button className="btn btn-small" onClick={retryConnection}>
+              Retry now
+            </button>
+          </div>
         </div>
       )}
 
-      {connectionState === "reconnecting" && (
+      {(connectionState === "reconnecting" || connectionState === "connecting") && (
         <div className="connection-alert connection-alert-reconnecting">
-          Reconnecting to live room updates…
+          <div className="connection-alert-body">
+            <strong className="connection-alert-title">
+              {connectionState === "reconnecting" ? "Reconnecting live updates…" : "Connecting live updates…"}
+            </strong>
+            <span className="connection-alert-detail">{connectionStatus.detail}</span>
+          </div>
+          {connectionStatus.attempts > 0 && (
+            <div className="connection-alert-actions">
+              <button className="btn btn-small" onClick={retryConnection}>
+                Retry now
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -358,7 +380,14 @@ export default function RoomView({
       </nav>
 
       <div className="room-chat-pane" style={{ display: activeTab === "chat" ? "contents" : "none" }}>
-        {room && <PausedBanner status={room.status} onResume={resume} resuming={resuming} />}
+        {room && (
+          <PausedBanner
+            status={room.status}
+            cycleLimit={room.cycle_limit}
+            onResume={resume}
+            resuming={resuming}
+          />
+        )}
         <ChatThread messages={messages} thinkingAgents={thinkingAgents} />
         <Composer
           onSend={send}

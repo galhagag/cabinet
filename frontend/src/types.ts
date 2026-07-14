@@ -177,6 +177,13 @@ export interface RealtimeTokenOut {
 
 export type RoomConnectionState = "connecting" | "live" | "reconnecting" | "offline";
 
+export interface RoomConnectionStatus {
+  state: RoomConnectionState;
+  attempts: number;
+  maxAttempts: number;
+  detail: string;
+}
+
 // --- WebSocket events ------------------------------------------------------------
 export interface WsMessageCreated {
   type: "message_created";

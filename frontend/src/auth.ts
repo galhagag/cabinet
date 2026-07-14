@@ -42,7 +42,7 @@ function getMsal(): PublicClientApplication {
         authority: `https://login.microsoftonline.com/${tenantId}`,
         redirectUri: window.location.origin,
       },
-      cache: { cacheLocation: "localStorage" },
+      cache: { cacheLocation: "sessionStorage" },
     });
   }
   return msal;

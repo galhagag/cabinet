@@ -1,9 +1,11 @@
 export default function PausedBanner({
   status,
+  cycleLimit,
   onResume,
   resuming,
 }: {
   status: string;
+  cycleLimit: number;
   onResume: () => void;
   resuming: boolean;
 }) {
@@ -12,7 +14,7 @@ export default function PausedBanner({
   return (
     <div className="paused-alert">
       <span className="paused-text">
-        Agents paused — 6-turn autonomous budget reached. Post a message or resume.
+        Agents paused — {cycleLimit}-turn autonomous budget reached. Post a message or resume.
       </span>
       <button className="btn btn-resume" onClick={onResume} disabled={resuming}>
         {resuming ? "Resuming…" : "Resume"}
