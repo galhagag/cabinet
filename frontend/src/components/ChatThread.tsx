@@ -3,6 +3,7 @@ import { getUserEmail } from "../api";
 import type { MessageOut } from "../types";
 import { Avatar } from "./Avatar";
 import ReactMarkdown from "react-markdown";
+import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
 
@@ -94,15 +95,10 @@ export default function ChatThread({
             <div className={bubbleClass(msg, outgoing)}>
               <div className="msg-header">
                 <span className="msg-sender">{msg.sender_name}</span>
-                {msg.cycle_number !== null && (
-                  <span className="cycle-chip" title="Autonomous cycle number">
-                    cycle {msg.cycle_number}
-                  </span>
-                )}
                 <span className="msg-time">{formatTime(msg.created_at)}</span>
               </div>
               <div className="msg-content">
-                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
                   {msg.content}
                 </ReactMarkdown>
               </div>
