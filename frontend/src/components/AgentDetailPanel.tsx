@@ -19,10 +19,14 @@ export default function AgentDetailPanel({
   roomId,
   agent,
   onBack,
+  instructionsRefreshSignal = 0,
+  skillsRefreshSignal = 0,
 }: {
   roomId: string;
   agent: RoomAgentOut;
   onBack: () => void;
+  instructionsRefreshSignal?: number;
+  skillsRefreshSignal?: number;
 }) {
   const [tab, setTab] = useState<Tab>("instructions");
 
@@ -54,9 +58,19 @@ export default function AgentDetailPanel({
 
       <div className="agent-detail-tab-content">
         {tab === "instructions" && (
-          <AgentInstructionsTab roomId={roomId} agentKey={agent.agent_key} />
+          <AgentInstructionsTab
+            roomId={roomId}
+            agentKey={agent.agent_key}
+            refreshSignal={instructionsRefreshSignal}
+          />
         )}
-        {tab === "skills" && <AgentSkillsTab roomId={roomId} agentKey={agent.agent_key} />}
+        {tab === "skills" && (
+          <AgentSkillsTab
+            roomId={roomId}
+            agentKey={agent.agent_key}
+            refreshSignal={skillsRefreshSignal}
+          />
+        )}
         {tab === "usage" && <AgentUsageTab roomId={roomId} agentKey={agent.agent_key} />}
       </div>
     </div>

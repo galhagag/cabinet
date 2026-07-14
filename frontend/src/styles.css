@@ -1027,7 +1027,7 @@ textarea {
 .agent-editor-footer {
   margin-top: 0.7rem;
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
 }
 
 /* ---- modal ------------------------------------------------------------------------ */
@@ -1141,6 +1141,10 @@ textarea {
   margin-left: auto;
 }
 
+.skill-delete-btn {
+  margin-left: auto;
+}
+
 /* ---- agents skills view ---------------------------------------------------------- */
 .agents-skills-view {
   max-width: 900px;
@@ -1224,6 +1228,34 @@ textarea {
   white-space: pre-wrap;
   max-height: 220px;
   overflow-y: auto;
+}
+
+.instructions-history {
+  margin-top: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.instructions-history-entry {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0.6rem 0.8rem;
+}
+
+.instructions-history-old,
+.instructions-history-new {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  margin: 0.3rem 0 0;
+}
+
+.instructions-history-old {
+  color: var(--text-muted);
+  text-decoration: line-through;
 }
 
 .usage-stat-grid {

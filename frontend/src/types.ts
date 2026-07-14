@@ -40,6 +40,13 @@ export interface InstructionsUpdate {
   instructions: string;
 }
 
+export interface InstructionsHistoryEntryOut {
+  actor: string;
+  old_instructions: string;
+  new_instructions: string;
+  created_at: string;
+}
+
 export interface AgentUsageOut {
   agent_key: AgentKey;
   message_count: number;
@@ -201,6 +208,7 @@ export interface WsAgentInstructionsUpdated {
   type: "agent_instructions_updated";
   room_id: string;
   agent_key: string;
+  actor: string;
 }
 
 export interface WsAgentSkillToggled {

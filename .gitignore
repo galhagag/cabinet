@@ -19,3 +19,6 @@ smoke.db
 
 # Git worktrees
 .worktrees/
+
+# Superpowers scratch state (progress ledger, task briefs/reports)
+.superpowers/

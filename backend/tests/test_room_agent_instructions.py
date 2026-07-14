@@ -88,3 +88,46 @@ def test_ws_receives_agent_instructions_updated(client):
         event = drain_until(ws, "agent_instructions_updated")
         assert event["agent_key"] == "fce"
         assert event["room_id"] == room["id"]
+        assert event["actor"]
+
+
+def test_instructions_history_records_old_and_new_text(client):
+    room = make_room(client, "InstructionsHistoryBank")
+    client.put(
+        f"/api/rooms/{room['id']}/agents/fce/instructions",
+        json={"instructions": "First version."},
+    )
+    client.put(
+        f"/api/rooms/{room['id']}/agents/fce/instructions",
+        json={"instructions": "Second version."},
+    )
+    resp = client.get(f"/api/rooms/{room['id']}/agents/fce/instructions/history")
+    assert resp.status_code == 200
+    entries = resp.json()
+    assert len(entries) == 2
+    # newest first
+    assert entries[0]["old_instructions"] == "First version."
+    assert entries[0]["new_instructions"] == "Second version."
+    assert entries[0]["actor"]
+    assert entries[1]["old_instructions"] == ""
+    assert entries[1]["new_instructions"] == "First version."
+
+
+def test_instructions_history_is_per_agent(client):
+    room = make_room(client, "InstructionsHistoryBank2")
+    client.put(
+        f"/api/rooms/{room['id']}/agents/data_expert/instructions",
+        json={"instructions": "Data Expert only."},
+    )
+    resp = client.get(f"/api/rooms/{room['id']}/agents/fce/instructions/history")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_instructions_history_non_member_403(client):
+    room = make_room(client, "InstructionsHistoryBank3")
+    resp = client.get(
+        f"/api/rooms/{room['id']}/agents/fce/instructions/history",
+        headers={"X-User-Email": "outsider@bank.example"},
+    )
+    assert resp.status_code == 403
