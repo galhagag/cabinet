@@ -17,7 +17,7 @@ class _FlakyLLM:
         self._ok_calls = ok_calls
         self._calls = 0
 
-    async def complete(self, *, agent_key, system_prompt, turns):
+    async def complete(self, *, agent_key, system_prompt, turns, tools=None):
         from app.agents.foundry_client import LLMError
 
         self._calls += 1

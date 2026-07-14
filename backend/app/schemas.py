@@ -103,6 +103,7 @@ class MessageOut(BaseModel):
     content: str
     input_tokens: int | None = None
     output_tokens: int | None = None
+    tool_invocations: list[dict] | None = None
     created_at: datetime
 
 

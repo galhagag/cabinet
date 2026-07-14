@@ -38,15 +38,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     blob_provider = build_blob_provider(settings, secret_provider)
     manager, broker = build_realtime(settings, secret_provider)
     llm = await build_llm_backend(settings, secret_provider)
+    google_oauth = GoogleOAuthService(settings, secret_provider)
 
     app.state.settings = settings
     app.state.secret_provider = secret_provider
     app.state.blob_provider = blob_provider
     app.state.manager = manager
     app.state.broker = broker
-    app.state.orchestrator = Orchestrator(settings, llm, broker)
+    app.state.orchestrator = Orchestrator(
+        settings, llm, broker, secret_provider=secret_provider, google_oauth=google_oauth
+    )
     app.state.skills_service = SkillsService(blob_provider)
-    app.state.google_oauth = GoogleOAuthService(settings, secret_provider)
+    app.state.google_oauth = google_oauth
     app.state.entra_validator = (
         EntraTokenValidator(settings) if settings.auth_mode == "entra" else None
     )

@@ -122,6 +122,10 @@ class Message(Base):
     # Populated for agent replies only — usage reported by the LLM backend.
     input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # One entry per tool call made while producing this reply, e.g.
+    # {"tool": "web_search", "query": "...", "success": True}. None for
+    # messages that never used a tool.
+    tool_invocations: Mapped[list | None] = mapped_column(JSON, nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
