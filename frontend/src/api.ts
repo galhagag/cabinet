@@ -13,6 +13,7 @@ import type {
   RoomMemberOut,
   RoomOut,
   SkillOut,
+  ToolOut,
 } from "./types";
 
 export const API_BASE: string = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
@@ -180,6 +181,16 @@ export const toggleSkill = (
   enabled: boolean,
 ) =>
   request<SkillOut>(`/api/rooms/${roomId}/agents/${agentKey}/skills/${skillId}`, {
+    method: "PUT",
+    body: JSON.stringify({ enabled }),
+  });
+
+// --- Tools ------------------------------------------------------------------------
+export const listTools = (roomId: string, agentKey: string) =>
+  request<ToolOut[]>(`/api/rooms/${roomId}/agents/${agentKey}/tools`);
+
+export const toggleTool = (roomId: string, agentKey: string, toolName: string, enabled: boolean) =>
+  request<ToolOut>(`/api/rooms/${roomId}/agents/${agentKey}/tools/${toolName}`, {
     method: "PUT",
     body: JSON.stringify({ enabled }),
   });
