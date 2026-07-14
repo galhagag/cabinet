@@ -78,13 +78,13 @@ async def drive_search(arguments: dict, ctx: ToolContext) -> str:
                 headers={"Authorization": f"Bearer {token}"},
             )
             response.raise_for_status()
-        except httpx.HTTPError as exc:
+            files = response.json().get("files", [])
+            if not files:
+                return f"No Drive files found matching {query!r}."
+            lines = [f"- {f['name']} ({f['webViewLink']})" for f in files]
+        except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
             raise ToolExecutionError(f"drive_search failed: {exc}") from exc
 
-    files = response.json().get("files", [])
-    if not files:
-        return f"No Drive files found matching {query!r}."
-    lines = [f"- {f['name']} ({f['webViewLink']})" for f in files]
     return f"Found {len(files)} file(s) in this room's Drive:\n" + "\n".join(lines)
 
 
@@ -99,15 +99,16 @@ async def web_search(arguments: dict, ctx: ToolContext) -> str:
                 headers={"Authorization": f"Bearer {api_key}"},
             )
             response.raise_for_status()
-        except httpx.HTTPError as exc:
+            results = response.json().get("results", [])
+            if not results:
+                return f"No web results found for {query!r}."
+            lines = [
+                f"- {r['title']}: {r['url']}\n  {r.get('content', '')[:280]}"
+                for r in results
+            ]
+        except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
             raise ToolExecutionError(f"web_search failed: {exc}") from exc
 
-    results = response.json().get("results", [])
-    if not results:
-        return f"No web results found for {query!r}."
-    lines = [
-        f"- {r['title']}: {r['url']}\n  {r.get('content', '')[:280]}" for r in results
-    ]
     return f"Found {len(results)} web result(s):\n" + "\n".join(lines)
 
 
