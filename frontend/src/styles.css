@@ -651,9 +651,14 @@ textarea {
 }
 
 /* ---- chat thread ------------------------------------------------------------ */
-.chat-thread {
+.chat-thread-wrap {
+  position: relative;
   flex: 1;
   min-height: 240px;
+}
+
+.chat-thread {
+  height: 100%;
   overflow-y: auto;
   background: var(--bg-raised);
   border: 1px solid var(--border);
@@ -667,6 +672,26 @@ textarea {
 .chat-empty {
   margin: auto;
   text-align: center;
+}
+
+.chat-jump-to-latest {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  border: 1px solid var(--accent);
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--accent-hover);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  padding: 0.45rem 0.75rem;
+  border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(15, 27, 53, 0.16);
+  cursor: pointer;
+}
+
+.chat-jump-to-latest:hover {
+  background: #fff;
 }
 
 .msg-row {

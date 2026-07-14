@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { createRoom } from "../api";
 import type { RoomOut } from "../types";
 import { toastError } from "../toast";
 import { AvatarCluster, type AvatarClusterItem } from "./Avatar";
+import Modal from "./Modal";
 
 const NEW_ROOM_DIALOG_TITLE_ID = "new-room-dialog-title";
 
@@ -50,16 +51,6 @@ function NewRoomModal({
   const [enrichment, setEnrichment] = useState("");
   const [creating, setCreating] = useState(false);
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
     const name = customerName.trim();
@@ -76,20 +67,7 @@ function NewRoomModal({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div
-        className="modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={NEW_ROOM_DIALOG_TITLE_ID}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="modal-header">
-          <h3 id={NEW_ROOM_DIALOG_TITLE_ID}>New Cabinet Room</h3>
-          <button className="modal-close" onClick={onClose} aria-label="Close">
-            ×
-          </button>
-        </div>
+    <Modal title="New Cabinet Room" titleId={NEW_ROOM_DIALOG_TITLE_ID} onClose={onClose}>
         <form onSubmit={handleCreate} className="new-room-form">
           <label className="field">
             <span className="field-label">Customer name</span>
@@ -116,8 +94,7 @@ function NewRoomModal({
             {creating ? "Creating…" : "Create room"}
           </button>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getUserEmail } from "../api";
 import { getActiveAccount, isEntraAuth } from "../auth";
 import type { MessageOut } from "../types";
@@ -65,7 +65,10 @@ export default function ChatThread({
   messages: MessageOut[];
   thinkingAgents: Record<string, string>;
 }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const shouldStickToBottomRef = useRef(true);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const thinking = Object.entries(thinkingAgents);
   const currentUser = (
     isEntraAuth ? getActiveAccount()?.username ?? "" : getUserEmail()
@@ -73,12 +76,36 @@ export default function ChatThread({
     .trim()
     .toLowerCase();
 
-  useEffect(() => {
+  const syncScrollState = () => {
+    const container = containerRef.current;
+    if (!container) return;
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    const nearBottom = distanceFromBottom < 72;
+    shouldStickToBottomRef.current = nearBottom;
+    setShowJumpToLatest(!nearBottom);
+  };
+
+  const jumpToLatest = () => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    shouldStickToBottomRef.current = true;
+    setShowJumpToLatest(false);
+  };
+
+  useEffect(() => {
+    syncScrollState();
+  }, []);
+
+  useEffect(() => {
+    if (!shouldStickToBottomRef.current) {
+      setShowJumpToLatest(true);
+      return;
+    }
+    jumpToLatest();
   }, [messages.length, thinking.length]);
 
   return (
-    <div className="chat-thread">
+    <div className="chat-thread-wrap">
+      <div className="chat-thread" ref={containerRef} onScroll={syncScrollState}>
       {messages.length === 0 && (
         <div className="muted chat-empty">
           No messages yet. Say hello to the Cabinet — try mentioning @DataExpert or @FCE.
@@ -133,6 +160,12 @@ export default function ChatThread({
         </div>
       ))}
       <div ref={bottomRef} />
+      </div>
+      {showJumpToLatest && (
+        <button className="chat-jump-to-latest" onClick={jumpToLatest}>
+          Jump to latest
+        </button>
+      )}
     </div>
   );
 }
