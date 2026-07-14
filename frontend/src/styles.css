@@ -342,6 +342,42 @@ textarea {
   border: 2px solid var(--bg-raised);
 }
 
+/* ---- room logo ------------------------------------------------------------- */
+.room-logo {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+.room-logo-img {
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.room-logo-edit {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.room-logo:hover .room-logo-edit {
+  display: flex;
+}
+
+.room-logo-file-input {
+  display: none;
+}
+
 .btn-icon {
   display: inline-flex;
   align-items: center;
