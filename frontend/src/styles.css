@@ -1128,6 +1128,10 @@ textarea {
   margin-left: auto;
 }
 
+.skill-delete-btn {
+  margin-left: auto;
+}
+
 /* ---- agents skills view ---------------------------------------------------------- */
 .agents-skills-view {
   max-width: 900px;
