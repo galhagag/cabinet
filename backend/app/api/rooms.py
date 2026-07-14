@@ -417,7 +417,7 @@ async def get_instructions_history(
             AuditLog.room_id == room_id,
             AuditLog.action == "room_agent_instructions_updated",
         )
-        .order_by(AuditLog.created_at.desc())
+        .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
     )
     return [
         InstructionsHistoryEntryOut(

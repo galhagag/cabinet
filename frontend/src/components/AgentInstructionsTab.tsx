@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getInstructionsHistory, getRoomAgent, updateRoomAgentInstructions } from "../api";
 import type { AgentKey, InstructionsHistoryEntryOut } from "../types";
 import { pushToast, toastError } from "../toast";
@@ -15,6 +15,8 @@ export default function AgentInstructionsTab({
   const [systemPrompt, setSystemPrompt] = useState<string | null>(null);
   const [instructions, setInstructions] = useState("");
   const [saved, setSaved] = useState("");
+  const savedRef = useRef(saved);
+  savedRef.current = saved;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +29,7 @@ export default function AgentInstructionsTab({
     getRoomAgent(roomId, agentKey)
       .then((detail) => {
         setSystemPrompt(detail.system_prompt);
-        setInstructions(detail.instructions);
+        setInstructions((cur) => (cur === savedRef.current ? detail.instructions : cur));
         setSaved(detail.instructions);
       })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))

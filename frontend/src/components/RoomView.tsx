@@ -93,8 +93,8 @@ export default function RoomView({
           pushToast("info", `Skill added${event.skill_name ? `: ${event.skill_name}` : ""}`);
           break;
         case "agent_instructions_updated": {
-          const currentIdentity = isEntraAuth ? getActiveAccount()?.username : getUserEmail();
-          if (event.actor !== currentIdentity) {
+          const currentIdentity = (isEntraAuth ? getActiveAccount()?.username : getUserEmail())?.toLowerCase();
+          if (event.actor?.toLowerCase() !== currentIdentity) {
             pushToast(
               "info",
               `Instructions updated for ${agentDisplayName(roomRef.current, event.agent_key)}`,
