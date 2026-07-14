@@ -82,15 +82,18 @@ async def _fetch_and_broadcast_logo(
     docs/superpowers/specs/2026-07-14-room-logo-design.md."""
     async with get_sessionmaker()() as session:
         room = await logo_service.fetch_for_room(session, room_id)
-    if room is None:
-        return
+        if room is None:
+            return
+        logo_url = logo_url_for(room)
+        logo_source = room.logo_source
+
     await broker.publish(
         room_id,
         {
             "type": "room_logo_updated",
             "room_id": room_id,
-            "logo_url": logo_url_for(room),
-            "logo_source": room.logo_source,
+            "logo_url": logo_url,
+            "logo_source": logo_source,
         },
     )
 

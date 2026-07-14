@@ -322,26 +322,6 @@ textarea {
   color: #fdf3fc;
 }
 
-.avatar-cluster {
-  display: inline-flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.avatar-clustered:not(:first-child) {
-  margin-left: -0.6rem;
-}
-
-.avatar-clustered {
-  border: 2px solid var(--bg-raised);
-}
-
-.avatar-overflow {
-  background: var(--bg-input);
-  color: var(--text-muted);
-  border: 2px solid var(--bg-raised);
-}
-
 /* ---- room logo ------------------------------------------------------------- */
 .room-logo {
   position: relative;
