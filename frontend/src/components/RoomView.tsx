@@ -46,6 +46,7 @@ export default function RoomView({
   const [activeTab, setActiveTab] = useState<"chat" | "agents">("chat");
   const [connectionState, setConnectionState] = useState<RoomConnectionState>("connecting");
   const roomRef = useRef<RoomOut | null>(null);
+  const socketRef = useRef<RoomSocket | null>(null);
   roomRef.current = room;
 
   const mergeMessages = useCallback((incoming: MessageOut[]) => {
@@ -185,8 +186,14 @@ export default function RoomView({
   // Live socket.
   useEffect(() => {
     const socket = new RoomSocket();
+    socketRef.current = socket;
     socket.connect(roomId, handleWsEvent, resyncRoomState, setConnectionState);
-    return () => socket.close();
+    return () => {
+      if (socketRef.current === socket) {
+        socketRef.current = null;
+      }
+      socket.close();
+    };
   }, [roomId, handleWsEvent, resyncRoomState]);
 
   // Mirror status + last message up to the sidebar so the chat list stays live.
@@ -258,6 +265,11 @@ export default function RoomView({
     }
   };
 
+  const retryConnection = () => {
+    setConnectionState("connecting");
+    socketRef.current?.reconnectNow();
+  };
+
   if (loadError) {
     return (
       <div className="room-view">
@@ -314,6 +326,21 @@ export default function RoomView({
           <InviteDialog roomId={roomId} />
         </div>
       </header>
+
+      {connectionState === "offline" && (
+        <div className="connection-alert connection-alert-offline">
+          <span>Live updates are offline. The room may be stale until you reconnect.</span>
+          <button className="btn btn-small" onClick={retryConnection}>
+            Reconnect
+          </button>
+        </div>
+      )}
+
+      {connectionState === "reconnecting" && (
+        <div className="connection-alert connection-alert-reconnecting">
+          Reconnecting to live room updates…
+        </div>
+      )}
 
       <nav className="room-tabs">
         <button
