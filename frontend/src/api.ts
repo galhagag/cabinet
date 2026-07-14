@@ -9,6 +9,7 @@ import type {
   InviteCreateOut,
   MessageOut,
   PostMessageResult,
+  RealtimeTokenOut,
   RoomAgentDetailOut,
   RoomMemberOut,
   RoomOut,
@@ -146,6 +147,10 @@ export const resumeRoom = (roomId: string) =>
 // --- Compiled prompt ----------------------------------------------------------------
 export const getCompiledPrompt = (roomId: string, agentKey: string) =>
   request<CompiledPromptOut>(`/api/rooms/${roomId}/agents/${agentKey}/compiled-prompt`);
+
+// --- Realtime ------------------------------------------------------------------------
+export const getRealtimeToken = (roomId: string) =>
+  request<RealtimeTokenOut>(`/api/rooms/${roomId}/realtime-token`);
 
 // --- Google Drive -------------------------------------------------------------------
 export const gdriveAuthorize = (roomId: string) =>

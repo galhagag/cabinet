@@ -594,6 +594,37 @@ textarea {
   flex-wrap: wrap;
 }
 
+.connection-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.connection-pill-connecting {
+  color: var(--accent);
+  background: rgba(56, 136, 255, 0.12);
+  border-color: rgba(56, 136, 255, 0.35);
+}
+
+.connection-pill-live {
+  color: var(--ok);
+  background: rgba(31, 157, 85, 0.12);
+  border-color: rgba(31, 157, 85, 0.35);
+}
+
+.connection-pill-reconnecting,
+.connection-pill-offline {
+  color: var(--warn);
+  background: rgba(200, 134, 11, 0.12);
+  border-color: rgba(200, 134, 11, 0.35);
+}
+
 /* ---- room tabs (Chat / Agents Skills) ------------------------------------- */
 .room-tabs {
   display: flex;

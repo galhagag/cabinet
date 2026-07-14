@@ -78,6 +78,15 @@ class _RaisingSecretProvider:
         raise RuntimeError("no real Web PubSub connection string in tests")
 
 
+class _RecordingWebPubSubClient:
+    def __init__(self):
+        self.calls = []
+
+    async def get_client_access_token(self, **kwargs):
+        self.calls.append(kwargs)
+        return {"url": "wss://example.test/client?access_token=fake"}
+
+
 def test_azure_broker_publish_swallows_transport_errors():
     """A broker that can't even build its client (no real Azure creds in
     tests) must not raise out of publish() — realtime is best-effort and a
@@ -86,5 +95,31 @@ def test_azure_broker_publish_swallows_transport_errors():
     async def scenario():
         broker = AzureWebPubSubBroker(_FakeSettings(), _RaisingSecretProvider())
         await broker.publish("room1", {"type": "message_created"})  # must not raise
+
+    asyncio.run(scenario())
+
+
+def test_azure_broker_client_access_auto_joins_room_group():
+    async def scenario():
+        broker = AzureWebPubSubBroker(_FakeSettings(), _RaisingSecretProvider())
+        fake_client = _RecordingWebPubSubClient()
+        broker._client = fake_client
+
+        result = await broker.client_access("room1", "alice@thetaray.com")
+
+        assert result == {
+            "mode": "webpubsub",
+            "url": "wss://example.test/client?access_token=fake",
+        }
+        assert fake_client.calls == [
+            {
+                "user_id": "alice@thetaray.com",
+                "roles": [
+                    "webpubsub.joinLeaveGroup.room1",
+                    "webpubsub.sendToGroup.room1",
+                ],
+                "groups": ["room1"],
+            }
+        ]
 
     asyncio.run(scenario())

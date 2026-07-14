@@ -16,6 +16,13 @@ export default function DrivePanel({
   const [busy, setBusy] = useState(false);
   const pollTimer = useRef<number | null>(null);
 
+  const stopPolling = () => {
+    if (pollTimer.current !== null) {
+      window.clearInterval(pollTimer.current);
+      pollTimer.current = null;
+    }
+  };
+
   const refresh = useCallback(() => {
     gdriveStatus(roomId)
       .then(setStatus)
@@ -26,9 +33,7 @@ export default function DrivePanel({
 
   useEffect(() => {
     refresh();
-    return () => {
-      if (pollTimer.current !== null) window.clearInterval(pollTimer.current);
-    };
+    return stopPolling;
   }, [refresh, refreshSignal]);
 
   // Poll while a consent flow may be in progress.
@@ -38,8 +43,7 @@ export default function DrivePanel({
     if (shouldPoll && pollTimer.current === null) {
       pollTimer.current = window.setInterval(refresh, 3000);
     } else if (!shouldPoll && pollTimer.current !== null) {
-      window.clearInterval(pollTimer.current);
-      pollTimer.current = null;
+      stopPolling();
     }
   }, [status, refresh]);
 
@@ -108,6 +112,13 @@ export default function DrivePanel({
             Link folder
           </button>
         </span>
+      ) : s === "error" ? (
+        <>
+          <span className="badge badge-paused">Authorization failed</span>
+          <button className="btn btn-small" onClick={connect} disabled={busy}>
+            {busy ? "Opening…" : "Try again"}
+          </button>
+        </>
       ) : (
         <span className="badge badge-linked" title={status?.google_folder_id ?? ""}>
           Linked: {status?.google_folder_name || status?.google_folder_id || "folder"}

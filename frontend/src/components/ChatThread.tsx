@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { getUserEmail } from "../api";
+import { getActiveAccount, isEntraAuth } from "../auth";
 import type { MessageOut } from "../types";
 import { Avatar } from "./Avatar";
 import ReactMarkdown from "react-markdown";
@@ -66,7 +67,11 @@ export default function ChatThread({
 }) {
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const thinking = Object.entries(thinkingAgents);
-  const currentUser = getUserEmail();
+  const currentUser = (
+    isEntraAuth ? getActiveAccount()?.username ?? "" : getUserEmail()
+  )
+    .trim()
+    .toLowerCase();
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -80,7 +85,9 @@ export default function ChatThread({
         </div>
       )}
       {messages.map((msg) => {
-        const outgoing = msg.sender_type === "human" && msg.sender_name === currentUser;
+        const outgoing =
+          msg.sender_type === "human" &&
+          msg.sender_name.trim().toLowerCase() === currentUser;
         const showAvatar = msg.sender_type !== "system" && !outgoing;
         return (
           <div key={msg.id} className={rowClass(msg, outgoing)}>
