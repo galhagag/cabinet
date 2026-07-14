@@ -82,7 +82,7 @@ async def drive_search(arguments: dict, ctx: ToolContext) -> str:
             if not files:
                 return f"No Drive files found matching {query!r}."
             lines = [f"- {f['name']} ({f['webViewLink']})" for f in files]
-        except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
+        except (httpx.HTTPError, KeyError, TypeError, ValueError, AttributeError) as exc:
             raise ToolExecutionError(f"drive_search failed: {exc}") from exc
 
     return f"Found {len(files)} file(s) in this room's Drive:\n" + "\n".join(lines)
@@ -106,7 +106,7 @@ async def web_search(arguments: dict, ctx: ToolContext) -> str:
                 f"- {r['title']}: {r['url']}\n  {r.get('content', '')[:280]}"
                 for r in results
             ]
-        except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
+        except (httpx.HTTPError, KeyError, TypeError, ValueError, AttributeError) as exc:
             raise ToolExecutionError(f"web_search failed: {exc}") from exc
 
     return f"Found {len(results)} web result(s):\n" + "\n".join(lines)

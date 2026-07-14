@@ -108,6 +108,26 @@ def test_drive_search_raises_tool_execution_error_on_malformed_response(client):
     client.portal.call(run)
 
 
+def test_drive_search_raises_tool_execution_error_on_non_dict_response(client):
+    install_mock_google(client.app)
+    room = make_room(client, "ToolsDriveBank5")
+    _link_drive(client, room["id"])
+
+    def non_dict_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[1, 2, 3])
+
+    transport = httpx.MockTransport(non_dict_handler)
+
+    async def run():
+        try:
+            await _run_drive_search(client, room["id"], "schema", transport)
+            raise AssertionError("expected ToolExecutionError")
+        except ToolExecutionError:
+            pass
+
+    client.portal.call(run)
+
+
 def _tavily_handler(results):
     def handler(request: httpx.Request) -> httpx.Response:
         assert str(request.url) == "https://api.tavily.com/search"
@@ -174,6 +194,24 @@ def test_web_search_raises_tool_execution_error_on_malformed_response(client):
         return httpx.Response(200, content=b"not json")
 
     transport = httpx.MockTransport(malformed_handler)
+
+    async def run():
+        try:
+            await _run_web_search(client, room["id"], "x", transport)
+            raise AssertionError("expected ToolExecutionError")
+        except ToolExecutionError:
+            pass
+
+    client.portal.call(run)
+
+
+def test_web_search_raises_tool_execution_error_on_non_dict_response(client):
+    room = make_room(client, "ToolsWebBank4")
+
+    def non_dict_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[1, 2, 3])
+
+    transport = httpx.MockTransport(non_dict_handler)
 
     async def run():
         try:
