@@ -3,6 +3,7 @@ import { getRoom, getUserEmail, listMembers, listMessages, postMessage, resumeRo
 import type { MessageOut, RoomMemberOut, RoomOut, RoomWsEvent } from "../types";
 import { RoomSocket } from "../ws";
 import { pushToast, toastError } from "../toast";
+import { getActiveAccount, isEntraAuth } from "../auth";
 import ChatThread from "./ChatThread";
 import Composer from "./Composer";
 import PausedBanner from "./PausedBanner";
@@ -91,8 +92,9 @@ export default function RoomView({
         case "skill_added":
           pushToast("info", `Skill added${event.skill_name ? `: ${event.skill_name}` : ""}`);
           break;
-        case "agent_instructions_updated":
-          if (event.actor !== getUserEmail()) {
+        case "agent_instructions_updated": {
+          const currentIdentity = isEntraAuth ? getActiveAccount()?.username : getUserEmail();
+          if (event.actor !== currentIdentity) {
             pushToast(
               "info",
               `Instructions updated for ${agentDisplayName(roomRef.current, event.agent_key)}`,
@@ -100,6 +102,7 @@ export default function RoomView({
           }
           setInstructionsRefreshSignal((n) => n + 1);
           break;
+        }
         case "agent_skill_toggled":
           pushToast(
             "info",
