@@ -235,6 +235,21 @@ class RoomSkillOverride(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class RoomToolOverride(Base):
+    """Room-scoped disable toggle for a built-in tool — identical precedent
+    to RoomSkillOverride. Tools are code-defined (TOOL_REGISTRY), not DB
+    rows; this table only ever records the disabled exception.
+    """
+
+    __tablename__ = "room_tool_overrides"
+
+    room_id: Mapped[str] = mapped_column(
+        ForeignKey("rooms.id", ondelete="CASCADE"), primary_key=True
+    )
+    tool_name: Mapped[str] = mapped_column(String(64), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class AuditLog(Base):
     __tablename__ = "audit_log"
 
