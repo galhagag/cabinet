@@ -148,6 +148,17 @@ class SkillToggleUpdate(BaseModel):
     enabled: bool
 
 
+# --- Tools ------------------------------------------------------------------
+class ToolOut(BaseModel):
+    name: str
+    description: str
+    enabled: bool = True
+
+
+class ToolToggleUpdate(BaseModel):
+    enabled: bool
+
+
 # --- Compiled prompt (debug/inspection) ----------------------------------------
 class CompiledPromptOut(BaseModel):
     agent_key: str
