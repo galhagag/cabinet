@@ -1,12 +1,25 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createInvite } from "../api";
 import type { InviteCreateOut } from "../types";
 import { pushToast, toastError } from "../toast";
+
+const INVITE_DIALOG_TITLE_ID = "invite-dialog-title";
 
 export default function InviteDialog({ roomId }: { roomId: string }) {
   const [open, setOpen] = useState(false);
   const [invite, setInvite] = useState<InviteCreateOut | null>(null);
   const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open]);
 
   const create = async () => {
     setCreating(true);
@@ -43,9 +56,15 @@ export default function InviteDialog({ roomId }: { roomId: string }) {
       </button>
       {open && (
         <div className="modal-overlay" onClick={() => setOpen(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={INVITE_DIALOG_TITLE_ID}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="modal-header">
-              <h3>Invite stakeholders</h3>
+              <h3 id={INVITE_DIALOG_TITLE_ID}>Invite stakeholders</h3>
               <button className="modal-close" onClick={() => setOpen(false)} aria-label="Close">
                 ×
               </button>
