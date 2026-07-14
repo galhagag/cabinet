@@ -70,6 +70,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new ApiError(res.status, detail);
   }
 
+  if (res.status === 204) {
+    return undefined as T;
+  }
   return (await res.json()) as T;
 }
 
@@ -86,6 +89,23 @@ export const updateAgentConfig = (agentKey: string, systemPrompt: string) =>
   request<AgentConfigOut>(`/api/admin/agents/${agentKey}`, {
     method: "PUT",
     body: JSON.stringify({ system_prompt: systemPrompt }),
+  });
+
+export const uploadGlobalSkill = (agentKey: string, file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  return request<SkillOut>(`/api/admin/agents/${agentKey}/skills`, {
+    method: "POST",
+    body: form,
+  });
+};
+
+export const listGlobalSkills = (agentKey: string) =>
+  request<SkillOut[]>(`/api/admin/agents/${agentKey}/skills`);
+
+export const deleteGlobalSkill = (agentKey: string, skillId: string) =>
+  request<void>(`/api/admin/agents/${agentKey}/skills/${skillId}`, {
+    method: "DELETE",
   });
 
 // --- Rooms --------------------------------------------------------------------

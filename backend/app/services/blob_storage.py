@@ -13,6 +13,8 @@ class BlobStorageProvider(Protocol):
 
     async def download(self, path: str) -> bytes: ...
 
+    async def delete(self, path: str) -> None: ...
+
 
 class LocalBlobStorageProvider:
     """Dev/test provider storing blobs under a local root directory."""
@@ -35,6 +37,9 @@ class LocalBlobStorageProvider:
 
     async def download(self, path: str) -> bytes:
         return self._resolve(path).read_bytes()
+
+    async def delete(self, path: str) -> None:
+        self._resolve(path).unlink(missing_ok=True)
 
 
 class AzureBlobStorageProvider:
@@ -74,6 +79,18 @@ class AzureBlobStorageProvider:
         )
         downloader = await blob.download_blob()
         return await downloader.readall()
+
+    async def delete(self, path: str) -> None:
+        from azure.core.exceptions import ResourceNotFoundError
+
+        service = await self._get_service()
+        blob = service.get_blob_client(
+            container=self._settings.blob_container, blob=path
+        )
+        try:
+            await blob.delete_blob()
+        except ResourceNotFoundError:
+            pass
 
 
 def build_blob_provider(

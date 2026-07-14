@@ -289,3 +289,30 @@ def test_admin_read_endpoints_denied_for_non_admin(client, monkeypatch):
     finally:
         monkeypatch.delenv("CABINET_ADMIN_EMAILS")
         reset_settings_cache()
+
+
+# ---------------------------------------------------------------------------
+# Admin DELETE route must be gated exactly like the other admin writes
+# ---------------------------------------------------------------------------
+def test_admin_delete_skill_gated_by_allowlist(client, monkeypatch):
+    from app.config import reset_settings_cache
+
+    admin = {"X-User-Email": "boss@thetaray.com"}
+    skill = client.post(
+        "/api/admin/agents/fce/skills",
+        files={"file": ("global.md", b"# Policy\nScreen everything.", "text/markdown")},
+    ).json()
+
+    monkeypatch.setenv("CABINET_ADMIN_EMAILS", "boss@thetaray.com")
+    reset_settings_cache()
+    try:
+        denied = client.delete(f"/api/admin/agents/fce/skills/{skill['id']}")
+        assert denied.status_code == 403
+
+        allowed = client.delete(
+            f"/api/admin/agents/fce/skills/{skill['id']}", headers=admin
+        )
+        assert allowed.status_code == 204
+    finally:
+        monkeypatch.delenv("CABINET_ADMIN_EMAILS")
+        reset_settings_cache()

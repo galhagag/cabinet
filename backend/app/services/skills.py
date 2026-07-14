@@ -107,3 +107,27 @@ class SkillsService:
         )
         await session.commit()
         return skill
+
+    async def delete(
+        self,
+        session: AsyncSession,
+        *,
+        skill: AgentSkill,
+        actor: str = "system",
+    ) -> None:
+        """Remove a global skill: its blob, its DB row, and an audit entry."""
+        await self._blob.delete(skill.blob_path)
+        session.add(
+            AuditLog(
+                room_id=skill.room_id,
+                actor=actor,
+                action="global_skill_deleted",
+                detail={
+                    "agent_key": skill.agent_key,
+                    "skill_id": skill.id,
+                    "skill_name": skill.skill_name,
+                },
+            )
+        )
+        await session.delete(skill)
+        await session.commit()

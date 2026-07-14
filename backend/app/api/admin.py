@@ -111,3 +111,17 @@ async def list_global_skills(
         SkillOut.model_validate(skill, from_attributes=True)
         for skill in result.scalars().all()
     ]
+
+
+@router.delete("/agents/{agent_key}/skills/{skill_id}", status_code=204)
+async def delete_global_skill(
+    agent_key: str,
+    skill_id: str,
+    session: AsyncSession = Depends(get_session),
+    skills_service: SkillsService = Depends(get_skills_service),
+    user_email: str = Depends(require_admin),
+) -> None:
+    skill = await session.get(AgentSkill, skill_id)
+    if skill is None or skill.agent_key != agent_key or skill.room_id is not None:
+        raise HTTPException(status_code=404, detail="global skill not found")
+    await skills_service.delete(session, skill=skill, actor=user_email)
