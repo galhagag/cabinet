@@ -38,11 +38,18 @@ additive migrations already in `backend/alembic/versions/`.
 (`logo_source="pending"` by default), then schedules a FastAPI
 `BackgroundTasks` job — no new job-queue infrastructure — that:
 
-1. Calls the Brandfetch Brand Search API with `customer_name`, resolving it
-   to a domain + logo asset. New secret `brandfetch-api-key`, resolved
-   through the existing `SecretProvider` (Key Vault in prod), mirroring the
-   `tavily_api_key_secret` convention already in `config.py`.
-2. Downloads the logo image bytes via `httpx`.
+1. Calls the Brandfetch **Brand Search API** (`GET
+   https://api.brandfetch.io/v2/search/{customer_name}?c={client_id}`) —
+   confirmed against Brandfetch's current API reference. Auth here is a
+   `client_id` query param, not a bearer API key, so the new secret is
+   `brandfetch-client-id` (correcting an earlier draft of this spec that
+   assumed a bearer-token `brandfetch-api-key`), resolved through the
+   existing `SecretProvider` the same way every other secret name is. The
+   first matching result's `icon` field is the logo asset URL — one API
+   call resolves both "does a brand exist for this name" and "here's an
+   image for it," so there's no second Brand API call for full logo
+   metadata.
+2. Downloads the logo image bytes via `httpx` from that `icon` URL.
 3. Uploads them to blob storage at `rooms/{room_id}/logo.<ext>` via the
    existing `BlobStorageProvider.upload()`.
 4. Updates the room row: `logo_blob_path` set, `logo_source="auto"`.
