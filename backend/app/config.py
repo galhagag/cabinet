@@ -164,6 +164,18 @@ class Settings:
         )
     )
 
+    # --- Room logo (Brandfetch) --------------------------------------------
+    # Secret NAME resolved through the SecretProvider (Key Vault in prod). No
+    # dev default is registered for this in secrets.py on purpose — an
+    # unconfigured key makes logo lookup a no-op (logo_source="none"), never
+    # a boot failure or a live call from the default dev/test environment.
+    brandfetch_client_id_secret: str = "brandfetch-client-id"
+    brandfetch_search_endpoint: str = field(
+        default_factory=lambda: _env(
+            "CABINET_BRANDFETCH_SEARCH_ENDPOINT", "https://api.brandfetch.io/v2/search"
+        )
+    )
+
     # --- Crypto / signing -------------------------------------------------
     # Names of secrets used for token encryption and OAuth state signing.
     token_encryption_key_secret: str = "token-encryption-key"
