@@ -52,6 +52,17 @@ def _escape_drive_query(value: str) -> str:
     return value.replace("\\", "\\\\").replace("'", "\\'")
 
 
+async def _room_has_connected_drive(session: AsyncSession, room_id: str) -> bool:
+    """Mirrors the exact "not connected" condition `drive_search` itself
+    checks — a connection row must exist, be connected/linked, and have a
+    folder actually picked."""
+    result = await session.execute(
+        select(GDriveConnection).where(GDriveConnection.room_id == room_id)
+    )
+    conn = result.scalar_one_or_none()
+    return conn is not None and conn.status in ("connected", "linked") and bool(conn.google_folder_id)
+
+
 async def drive_search(arguments: dict, ctx: ToolContext) -> str:
     query = str(arguments.get("query", ""))
     result = await ctx.session.execute(
@@ -90,9 +101,9 @@ async def drive_search(arguments: dict, ctx: ToolContext) -> str:
 
 async def web_search(arguments: dict, ctx: ToolContext) -> str:
     query = str(arguments.get("query", ""))
-    api_key = await ctx.secret_provider.get_secret(ctx.settings.tavily_api_key_secret)
     async with httpx.AsyncClient(transport=ctx.transport) as client:
         try:
+            api_key = await ctx.secret_provider.get_secret(ctx.settings.tavily_api_key_secret)
             response = await client.post(
                 "https://api.tavily.com/search",
                 json={"query": query, "max_results": 5},

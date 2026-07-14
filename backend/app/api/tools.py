@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..agents.orchestrator import RealtimeBroker
 from ..agents.profiles import AGENT_KEYS
-from ..agents.tools import TOOL_REGISTRY, ToolDefinition
+from ..agents.tools import TOOL_REGISTRY, ToolDefinition, _room_has_connected_drive
 from ..db.base import get_session
 from ..db.models import AuditLog, RoomToolOverride
 from ..schemas import ToolOut, ToolToggleUpdate
@@ -18,8 +18,15 @@ from .deps import get_broker, require_room_member
 router = APIRouter(tags=["tools"])
 
 
-def _tools_for_agent(agent_key: str) -> list[ToolDefinition]:
-    return [t for t in TOOL_REGISTRY.values() if agent_key in t.default_agents]
+async def _tools_for_agent(
+    session: AsyncSession, room_id: str, agent_key: str
+) -> list[ToolDefinition]:
+    tools = [t for t in TOOL_REGISTRY.values() if agent_key in t.default_agents]
+    if any(t.name == "drive_search" for t in tools) and not await _room_has_connected_drive(
+        session, room_id
+    ):
+        tools = [t for t in tools if t.name != "drive_search"]
+    return tools
 
 
 @router.get(
@@ -41,7 +48,7 @@ async def list_tools(
     disabled = set(overrides.scalars().all())
     return [
         ToolOut(name=t.name, description=t.description, enabled=t.name not in disabled)
-        for t in _tools_for_agent(agent_key)
+        for t in await _tools_for_agent(session, room_id, agent_key)
     ]
 
 

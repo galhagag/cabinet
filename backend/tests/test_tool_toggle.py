@@ -6,7 +6,9 @@ def test_tools_list_defaults_enabled(client):
     room = make_room(client, "ToolsBank1")
     listed = client.get(f"/api/rooms/{room['id']}/agents/fce/tools").json()
     names = {t["name"] for t in listed}
-    assert names == {"drive_search", "web_search"}
+    # No Google Drive is connected for a fresh room, so drive_search is
+    # omitted entirely (nothing to search) — only web_search is offered.
+    assert names == {"web_search"}
     assert all(t["enabled"] for t in listed)
 
 

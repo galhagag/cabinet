@@ -38,10 +38,24 @@ from ..db.models import (
 )
 from ..services.google_oauth import GoogleOAuthService
 from ..services.secrets import SecretProvider
-from .foundry_client import ChatTurn, LLMBackend, LLMError, ToolCall, ToolResult, ToolSpec
+from .foundry_client import (
+    ChatTurn,
+    LLMBackend,
+    LLMError,
+    LLMResult,
+    ToolCall,
+    ToolResult,
+    ToolSpec,
+)
 from .profiles import AGENT_KEYS, DATA_EXPERT_KEY, DISPLAY_NAMES, FCE_KEY
 from .prompt_compiler import SkillSection, compile_system_prompt, parse_mention
-from .tools import TOOL_REGISTRY, ToolContext, ToolExecutionError, ToolRunner
+from .tools import (
+    TOOL_REGISTRY,
+    ToolContext,
+    ToolExecutionError,
+    ToolRunner,
+    _room_has_connected_drive,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -372,10 +386,18 @@ class Orchestrator:
             select(RoomToolOverride.tool_name).where(RoomToolOverride.room_id == room.id)
         )
         disabled = set(overrides.scalars().all())
-        return [
-            ToolSpec(name=t.name, description=t.description, parameters=t.parameters)
+        tools = [
+            t
             for t in TOOL_REGISTRY.values()
             if agent_key in t.default_agents and t.name not in disabled
+        ]
+        if any(t.name == "drive_search" for t in tools) and not await _room_has_connected_drive(
+            session, room.id
+        ):
+            tools = [t for t in tools if t.name != "drive_search"]
+        return [
+            ToolSpec(name=t.name, description=t.description, parameters=t.parameters)
+            for t in tools
         ]
 
     async def _log_tool_invocation(
@@ -410,7 +432,7 @@ class Orchestrator:
         agent_key: str,
         system_prompt: str,
         turns: list[ChatTurn],
-    ) -> tuple["LLMResultLike", list[dict]]:
+    ) -> tuple[LLMResult, list[dict]]:
         """Bounded LLM<->tool round-trip. Returns the final (tools-less)
         result plus every invocation made along the way, for
         Message.tool_invocations.

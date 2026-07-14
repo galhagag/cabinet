@@ -221,3 +221,58 @@ def test_web_search_raises_tool_execution_error_on_non_dict_response(client):
             pass
 
     client.portal.call(run)
+
+
+class _MissingSecretProvider:
+    """Stands in for a secret provider with no entry for the requested
+    name — mirrors EnvSecretProvider's bare KeyError for an unconfigured
+    secret (e.g. tavily_api_key_secret never set)."""
+
+    async def get_secret(self, name):
+        raise KeyError(name)
+
+
+def test_web_search_raises_tool_execution_error_when_secret_fetch_fails(client):
+    """The secret-fetch call must be inside web_search's error handling —
+    a bare KeyError escaping it would propagate past the orchestrator's
+    ToolExecutionError/LLMError catches all the way to a 500, leaving the
+    room active with a cycle already consumed and no message produced."""
+    room = make_room(client, "ToolsWebBank5")
+
+    async def run():
+        async with get_sessionmaker()() as session:
+            room_row = await session.get(Room, room["id"])
+            ctx = ToolContext(
+                session=session,
+                room=room_row,
+                settings=client.app.state.settings,
+                secret_provider=_MissingSecretProvider(),
+                google_oauth=client.app.state.google_oauth,
+            )
+            try:
+                await web_search({"query": "x"}, ctx)
+                raise AssertionError("expected ToolExecutionError")
+            except ToolExecutionError:
+                pass
+
+    client.portal.call(run)
+
+
+async def _get_enabled_tools(client, room_id: str, agent_key: str = "fce"):
+    async with get_sessionmaker()() as session:
+        room_row = await session.get(Room, room_id)
+        return await client.app.state.orchestrator._enabled_tools(session, room_row, agent_key)
+
+
+def test_enabled_tools_excludes_drive_search_when_no_drive_connected(client):
+    room = make_room(client, "ToolsEnabledBank1")
+    tools = client.portal.call(_get_enabled_tools, client, room["id"])
+    assert {t.name for t in tools} == {"web_search"}
+
+
+def test_enabled_tools_includes_drive_search_once_drive_connected(client):
+    install_mock_google(client.app)
+    room = make_room(client, "ToolsEnabledBank2")
+    _link_drive(client, room["id"])
+    tools = client.portal.call(_get_enabled_tools, client, room["id"])
+    assert {t.name for t in tools} == {"drive_search", "web_search"}
