@@ -37,7 +37,32 @@ _MOCK_TAG_RE = re.compile(r"\[[\w.]+·mock\]\s*")
 @dataclass(frozen=True)
 class ChatTurn:
     role: str  # "user" | "assistant"
+    content: str = ""
+    # Set on an assistant turn that requested one or more tool calls.
+    tool_calls: list[ToolCall] | None = None
+    # Set on the following user turn carrying each call's result.
+    tool_results: list[ToolResult] | None = None
+
+
+@dataclass(frozen=True)
+class ToolSpec:
+    name: str
+    description: str
+    parameters: dict  # JSON Schema
+
+
+@dataclass(frozen=True)
+class ToolCall:
+    id: str
+    name: str
+    arguments: dict
+
+
+@dataclass(frozen=True)
+class ToolResult:
+    tool_call_id: str
     content: str
+    is_error: bool = False
 
 
 @dataclass(frozen=True)
@@ -45,6 +70,7 @@ class LLMResult:
     text: str
     input_tokens: int = 0
     output_tokens: int = 0
+    tool_calls: list[ToolCall] | None = None
 
 
 class LLMError(Exception):
@@ -55,7 +81,12 @@ class LLMError(Exception):
 
 class LLMBackend(Protocol):
     async def complete(
-        self, *, agent_key: str, system_prompt: str, turns: list[ChatTurn]
+        self,
+        *,
+        agent_key: str,
+        system_prompt: str,
+        turns: list[ChatTurn],
+        tools: list[ToolSpec] | None = None,
     ) -> LLMResult: ...
 
 
@@ -95,9 +126,26 @@ class MockLLM:
         return quoted
 
     async def complete(
-        self, *, agent_key: str, system_prompt: str, turns: list[ChatTurn]
+        self,
+        *,
+        agent_key: str,
+        system_prompt: str,
+        turns: list[ChatTurn],
+        tools: list[ToolSpec] | None = None,
     ) -> LLMResult:
         last = turns[-1].content if turns else ""
+        # Deterministic scripted trigger: the phrase only ever appears in the
+        # turn that precedes the FIRST round of a tool loop — once the
+        # orchestrator appends the (empty-content) tool_results turn as the
+        # new last turn, this naturally stops matching, so the loop can
+        # never re-trigger on its own tool-result turn.
+        if tools and "use tools" in last.lower():
+            return LLMResult(
+                text="",
+                tool_calls=[
+                    ToolCall(id="mock-call-1", name=tools[0].name, arguments={"query": "mock query"})
+                ],
+            )
         flavor = self._FLAVOR.get(agent_key, "Acknowledged.")
         reply = f"[{agent_key}·mock] {flavor} (re: {self._quote(last)})"
         if "wrap up" in last.lower():
@@ -138,7 +186,12 @@ class FoundryLLM:
         self._client = AsyncAnthropicFoundry(**kwargs)
 
     async def complete(
-        self, *, agent_key: str, system_prompt: str, turns: list[ChatTurn]
+        self,
+        *,
+        agent_key: str,
+        system_prompt: str,
+        turns: list[ChatTurn],
+        tools: list[ToolSpec] | None = None,
     ) -> LLMResult:
         try:
             response = await self._client.messages.create(
@@ -202,7 +255,12 @@ class AzureOpenAILLM:
         self._client = AsyncAzureOpenAI(**kwargs)
 
     async def complete(
-        self, *, agent_key: str, system_prompt: str, turns: list[ChatTurn]
+        self,
+        *,
+        agent_key: str,
+        system_prompt: str,
+        turns: list[ChatTurn],
+        tools: list[ToolSpec] | None = None,
     ) -> LLMResult:
         messages = [{"role": "system", "content": system_prompt}] + [
             {"role": t.role, "content": t.content} for t in turns
