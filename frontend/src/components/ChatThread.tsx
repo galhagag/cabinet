@@ -106,6 +106,18 @@ export default function ChatThread({
                   {msg.content}
                 </ReactMarkdown>
               </div>
+              {msg.tool_invocations && msg.tool_invocations.length > 0 && (
+                <details className="msg-sources">
+                  <summary>Sources ({msg.tool_invocations.length})</summary>
+                  <ul>
+                    {msg.tool_invocations.map((inv, i) => (
+                      <li key={i}>
+                        {inv.tool === "web_search" ? "🔍" : "📁"} {inv.tool}: "{inv.query}"
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
               {msg.sender_type === "agent" &&
                 (msg.input_tokens !== null || msg.output_tokens !== null) && (
                   <TokenUsage input={msg.input_tokens ?? 0} output={msg.output_tokens ?? 0} />

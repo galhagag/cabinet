@@ -104,6 +104,15 @@ export default function RoomView({
             )}`,
           );
           break;
+        case "agent_tool_toggled":
+          pushToast(
+            "info",
+            `Tool ${event.enabled ? "enabled" : "disabled"} for ${agentDisplayName(
+              roomRef.current,
+              event.agent_key,
+            )}`,
+          );
+          break;
         case "drive_linked":
         case "drive_connected":
           setDriveRefreshSignal((n) => n + 1);
