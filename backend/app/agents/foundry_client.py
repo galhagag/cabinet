@@ -16,6 +16,7 @@ handoffs) with zero network and zero credentials.
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 from dataclasses import dataclass
@@ -160,14 +161,45 @@ class MockLLM:
         )
 
 
+def _turn_to_anthropic_message(turn: ChatTurn) -> dict:
+    if turn.tool_calls:
+        content: list[dict] = []
+        if turn.content:
+            content.append({"type": "text", "text": turn.content})
+        content.extend(
+            {"type": "tool_use", "id": c.id, "name": c.name, "input": c.arguments}
+            for c in turn.tool_calls
+        )
+        return {"role": "assistant", "content": content}
+    if turn.tool_results:
+        content = [
+            {
+                "type": "tool_result",
+                "tool_use_id": r.tool_call_id,
+                "content": r.content,
+                "is_error": r.is_error,
+            }
+            for r in turn.tool_results
+        ]
+        return {"role": "user", "content": content}
+    return {"role": turn.role, "content": turn.content}
+
+
 class FoundryLLM:
     """Claude on Microsoft Foundry through the official SDK client."""
 
-    def __init__(self, settings: Settings, api_key: str | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        api_key: str | None = None,
+        http_client: httpx.AsyncClient | None = None,
+    ) -> None:
         from anthropic import AsyncAnthropicFoundry
 
         self._settings = settings
         kwargs: dict = {"resource": settings.foundry_resource}
+        if http_client is not None:
+            kwargs["http_client"] = http_client
         if settings.foundry_auth == "entra":
             # Microsoft Entra ID authentication (managed identity / workload
             # identity on ACA/AKS). azure-identity is a production-only dep.
@@ -193,13 +225,19 @@ class FoundryLLM:
         turns: list[ChatTurn],
         tools: list[ToolSpec] | None = None,
     ) -> LLMResult:
+        kwargs: dict = {
+            "model": self._settings.foundry_model,
+            "max_tokens": self._settings.agent_max_tokens,
+            "system": system_prompt,
+            "messages": [_turn_to_anthropic_message(t) for t in turns],
+        }
+        if tools:
+            kwargs["tools"] = [
+                {"name": t.name, "description": t.description, "input_schema": t.parameters}
+                for t in tools
+            ]
         try:
-            response = await self._client.messages.create(
-                model=self._settings.foundry_model,
-                max_tokens=self._settings.agent_max_tokens,
-                system=system_prompt,
-                messages=[{"role": t.role, "content": t.content} for t in turns],
-            )
+            response = await self._client.messages.create(**kwargs)
         except Exception as exc:
             raise LLMError(f"Foundry completion failed for {agent_key}: {exc}") from exc
         input_tokens = getattr(response.usage, "input_tokens", 0) or 0
@@ -216,10 +254,50 @@ class FoundryLLM:
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
             )
+        if response.stop_reason == "tool_use":
+            calls = [
+                ToolCall(id=block.id, name=block.name, arguments=block.input)
+                for block in response.content
+                if block.type == "tool_use"
+            ]
+            text = "".join(block.text for block in response.content if block.type == "text")
+            return LLMResult(
+                text=text,
+                tool_calls=calls,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
         text = "".join(
             block.text for block in response.content if block.type == "text"
         )
         return LLMResult(text=text, input_tokens=input_tokens, output_tokens=output_tokens)
+
+
+def _turn_to_openai_messages(turn: ChatTurn) -> list[dict]:
+    """Returns a list because a tool_results turn expands into one 'tool'
+    role message per result — OpenAI has no equivalent of Claude nesting
+    multiple tool_result blocks inside a single message."""
+    if turn.tool_calls:
+        return [
+            {
+                "role": "assistant",
+                "content": turn.content or None,
+                "tool_calls": [
+                    {
+                        "id": c.id,
+                        "type": "function",
+                        "function": {"name": c.name, "arguments": json.dumps(c.arguments)},
+                    }
+                    for c in turn.tool_calls
+                ],
+            }
+        ]
+    if turn.tool_results:
+        return [
+            {"role": "tool", "tool_call_id": r.tool_call_id, "content": r.content}
+            for r in turn.tool_results
+        ]
+    return [{"role": turn.role, "content": turn.content}]
 
 
 class AzureOpenAILLM:
@@ -262,15 +340,29 @@ class AzureOpenAILLM:
         turns: list[ChatTurn],
         tools: list[ToolSpec] | None = None,
     ) -> LLMResult:
-        messages = [{"role": "system", "content": system_prompt}] + [
-            {"role": t.role, "content": t.content} for t in turns
-        ]
+        messages = [{"role": "system", "content": system_prompt}]
+        for t in turns:
+            messages.extend(_turn_to_openai_messages(t))
+
+        kwargs: dict = {
+            "model": self._settings.azure_openai_deployment,
+            "max_completion_tokens": self._settings.agent_max_tokens,
+            "messages": messages,
+        }
+        if tools:
+            kwargs["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.parameters,
+                    },
+                }
+                for t in tools
+            ]
         try:
-            response = await self._client.chat.completions.create(
-                model=self._settings.azure_openai_deployment,
-                max_completion_tokens=self._settings.agent_max_tokens,
-                messages=messages,
-            )
+            response = await self._client.chat.completions.create(**kwargs)
         except Exception as exc:
             raise LLMError(f"Azure OpenAI completion failed for {agent_key}: {exc}") from exc
         choice = response.choices[0]
@@ -287,6 +379,21 @@ class AzureOpenAILLM:
                     "Could a human colleague rephrase or narrow the ask? "
                     "HANDOFF_TO_HUMAN"
                 ),
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+        if choice.message.tool_calls:
+            calls = [
+                ToolCall(
+                    id=tc.id,
+                    name=tc.function.name,
+                    arguments=json.loads(tc.function.arguments or "{}"),
+                )
+                for tc in choice.message.tool_calls
+            ]
+            return LLMResult(
+                text=choice.message.content or "",
+                tool_calls=calls,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
             )
