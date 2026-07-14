@@ -103,6 +103,7 @@ class MessageOut(BaseModel):
     content: str
     input_tokens: int | None = None
     output_tokens: int | None = None
+    tool_invocations: list[dict] | None = None
     created_at: datetime
 
 
@@ -145,6 +146,17 @@ class SkillOut(BaseModel):
 
 
 class SkillToggleUpdate(BaseModel):
+    enabled: bool
+
+
+# --- Tools ------------------------------------------------------------------
+class ToolOut(BaseModel):
+    name: str
+    description: str
+    enabled: bool = True
+
+
+class ToolToggleUpdate(BaseModel):
     enabled: bool
 
 

@@ -114,6 +114,11 @@ class Settings:
     history_window: int = field(
         default_factory=lambda: _env_int("CABINET_HISTORY_WINDOW", 40, min_value=1)
     )
+    # Hard cap on LLM<->tool round-trips within a single turn — independent
+    # of the cycle budget, purely a runaway-loop / API-cost safety valve.
+    max_tool_rounds: int = field(
+        default_factory=lambda: _env_int("CABINET_MAX_TOOL_ROUNDS", 5, min_value=1)
+    )
 
     # --- Loop control ---------------------------------------------------
     # Hard product default: max autonomous agent-to-agent turns before pause.
@@ -169,6 +174,10 @@ class Settings:
     token_encryption_key_secret: str = "token-encryption-key"
     state_signing_key_secret: str = "state-signing-key"
     token_encryption_key_previous_secret: str = "token-encryption-key-previous"
+
+    # --- Tools ------------------------------------------------------------
+    # Secret NAME resolved through the SecretProvider (Key Vault in prod).
+    tavily_api_key_secret: str = "tavily-api-key"
 
     # --- Invites -----------------------------------------------------------
     invite_ttl_hours: int = field(

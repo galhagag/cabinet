@@ -44,6 +44,8 @@ def _dev_default(name: str) -> str:
         value = "mock-foundry-key"
     elif name == "azure-openai-api-key":
         value = "mock-azure-openai-key"
+    elif name == "tavily-api-key":
+        value = "mock-tavily-key"
     else:
         raise KeyError(f"secret not configured: {name}")
     _dev_default_cache[name] = value

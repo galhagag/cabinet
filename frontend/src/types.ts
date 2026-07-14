@@ -103,6 +103,7 @@ export interface MessageOut {
   content: string;
   input_tokens: number | null;
   output_tokens: number | null;
+  tool_invocations: ToolInvocation[] | null;
   created_at: string;
 }
 
@@ -156,6 +157,23 @@ export interface SkillToggleUpdate {
   enabled: boolean;
 }
 
+// --- Tools --------------------------------------------------------------------
+export interface ToolOut {
+  name: string;
+  description: string;
+  enabled: boolean;
+}
+
+export interface ToolToggleUpdate {
+  enabled: boolean;
+}
+
+export interface ToolInvocation {
+  tool: string;
+  query: string;
+  success?: boolean;
+}
+
 // --- Compiled prompt -----------------------------------------------------------
 export interface CompiledPromptOut {
   agent_key: string;
@@ -203,6 +221,14 @@ export interface WsAgentSkillToggled {
   enabled: boolean;
 }
 
+export interface WsAgentToolToggled {
+  type: "agent_tool_toggled";
+  room_id: string;
+  agent_key: string;
+  tool_name: string;
+  enabled: boolean;
+}
+
 export interface WsDriveLinked {
   type: "drive_linked";
   google_folder_id?: string;
@@ -221,5 +247,6 @@ export type RoomWsEvent =
   | WsSkillAdded
   | WsAgentInstructionsUpdated
   | WsAgentSkillToggled
+  | WsAgentToolToggled
   | WsDriveLinked
   | WsDriveConnected;

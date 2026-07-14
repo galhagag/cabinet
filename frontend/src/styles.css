@@ -856,6 +856,22 @@ textarea {
   color: var(--accent);
 }
 
+.msg-sources {
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.msg-sources summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.msg-sources ul {
+  margin: 0.25rem 0 0 1rem;
+  padding: 0;
+}
+
 .msg-usage {
   margin-top: 0.4rem;
   padding-top: 0.35rem;

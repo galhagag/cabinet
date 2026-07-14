@@ -26,10 +26,36 @@ from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import Settings
-from ..db.models import AgentGlobalConfig, AgentSkill, Message, Room, RoomAgent, RoomSkillOverride
-from .foundry_client import ChatTurn, LLMBackend, LLMError
+from ..db.models import (
+    AgentGlobalConfig,
+    AgentSkill,
+    AuditLog,
+    Message,
+    Room,
+    RoomAgent,
+    RoomSkillOverride,
+    RoomToolOverride,
+)
+from ..services.google_oauth import GoogleOAuthService
+from ..services.secrets import SecretProvider
+from .foundry_client import (
+    ChatTurn,
+    LLMBackend,
+    LLMError,
+    LLMResult,
+    ToolCall,
+    ToolResult,
+    ToolSpec,
+)
 from .profiles import AGENT_KEYS, DATA_EXPERT_KEY, DISPLAY_NAMES, FCE_KEY
 from .prompt_compiler import SkillSection, compile_system_prompt, parse_mention
+from .tools import (
+    TOOL_REGISTRY,
+    ToolContext,
+    ToolExecutionError,
+    ToolRunner,
+    _room_has_connected_drive,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,11 +97,20 @@ def _wrap_participant(name: str, content: str) -> str:
 
 class Orchestrator:
     def __init__(
-        self, settings: Settings, llm: LLMBackend, broker: RealtimeBroker
+        self,
+        settings: Settings,
+        llm: LLMBackend,
+        broker: RealtimeBroker,
+        *,
+        secret_provider: SecretProvider,
+        google_oauth: GoogleOAuthService,
     ) -> None:
         self._settings = settings
         self._llm = llm
         self._broker = broker
+        self._secret_provider = secret_provider
+        self._google_oauth = google_oauth
+        self._tool_runner = ToolRunner()
         self._room_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
     def room_lock(self, room_id: str) -> asyncio.Lock:
@@ -185,8 +220,8 @@ class Orchestrator:
             room.id, {"type": "agent_thinking", "agent_key": agent_key}
         )
         try:
-            result = await self._llm.complete(
-                agent_key=agent_key, system_prompt=system_prompt, turns=turns
+            result, invocations = await self._run_tool_loop(
+                session, room, agent_key, system_prompt, turns
             )
         except LLMError as exc:
             fail_msg = await self._fail_turn(session, room, agent_key, exc)
@@ -199,6 +234,7 @@ class Orchestrator:
             content=result.text,
             input_tokens=result.input_tokens,
             output_tokens=result.output_tokens,
+            tool_invocations=invocations or None,
         )
         session.add(msg)
         await session.commit()
@@ -229,8 +265,8 @@ class Orchestrator:
                 room.id, {"type": "agent_thinking", "agent_key": speaker}
             )
             try:
-                result = await self._llm.complete(
-                    agent_key=speaker, system_prompt=system_prompt, turns=turns
+                result, invocations = await self._run_tool_loop(
+                    session, room, speaker, system_prompt, turns
                 )
             except LLMError as exc:
                 fail_msg = await self._fail_turn(session, room, speaker, exc)
@@ -246,6 +282,7 @@ class Orchestrator:
                 content=result.text,
                 input_tokens=result.input_tokens,
                 output_tokens=result.output_tokens,
+                tool_invocations=invocations or None,
             )
             session.add(msg)
             await session.commit()
@@ -338,6 +375,114 @@ class Orchestrator:
                     "cycle_limit": row.cycle_limit,
                 },
             )
+
+    # ------------------------------------------------------------------
+    # Tool calling: a bounded LLM<->tool round-trip within one turn
+    # ------------------------------------------------------------------
+    async def _enabled_tools(
+        self, session: AsyncSession, room: Room, agent_key: str
+    ) -> list[ToolSpec]:
+        overrides = await session.execute(
+            select(RoomToolOverride.tool_name).where(RoomToolOverride.room_id == room.id)
+        )
+        disabled = set(overrides.scalars().all())
+        tools = [
+            t
+            for t in TOOL_REGISTRY.values()
+            if agent_key in t.default_agents and t.name not in disabled
+        ]
+        if any(t.name == "drive_search" for t in tools) and not await _room_has_connected_drive(
+            session, room.id
+        ):
+            tools = [t for t in tools if t.name != "drive_search"]
+        return [
+            ToolSpec(name=t.name, description=t.description, parameters=t.parameters)
+            for t in tools
+        ]
+
+    async def _log_tool_invocation(
+        self,
+        session: AsyncSession,
+        room: Room,
+        agent_key: str,
+        call: ToolCall,
+        *,
+        success: bool,
+    ) -> None:
+        query = str(call.arguments.get("query", ""))[:200]
+        session.add(
+            AuditLog(
+                room_id=room.id,
+                actor=f"agent:{agent_key}",
+                action="tool_invoked",
+                detail={
+                    "tool_name": call.name,
+                    "agent_key": agent_key,
+                    "query": query,
+                    "success": success,
+                },
+            )
+        )
+        await session.commit()
+
+    async def _run_tool_loop(
+        self,
+        session: AsyncSession,
+        room: Room,
+        agent_key: str,
+        system_prompt: str,
+        turns: list[ChatTurn],
+    ) -> tuple[LLMResult, list[dict]]:
+        """Bounded LLM<->tool round-trip. Returns the final (tools-less)
+        result plus every invocation made along the way, for
+        Message.tool_invocations.
+
+        A round-trip never claims an additional cycle — the caller already
+        claimed exactly one for this turn before calling in.
+        """
+        tools = await self._enabled_tools(session, room, agent_key)
+        invocations: list[dict] = []
+
+        for _ in range(self._settings.max_tool_rounds):
+            result = await self._llm.complete(
+                agent_key=agent_key,
+                system_prompt=system_prompt,
+                turns=turns,
+                tools=tools or None,
+            )
+            if not result.tool_calls:
+                return result, invocations
+
+            turns = turns + [
+                ChatTurn(role="assistant", content=result.text, tool_calls=result.tool_calls)
+            ]
+            tool_results: list[ToolResult] = []
+            ctx = ToolContext(
+                session=session,
+                room=room,
+                settings=self._settings,
+                secret_provider=self._secret_provider,
+                google_oauth=self._google_oauth,
+            )
+            for call in result.tool_calls:
+                query = str(call.arguments.get("query", ""))
+                try:
+                    output = await self._tool_runner.run(call.name, call.arguments, ctx)
+                    tool_results.append(ToolResult(tool_call_id=call.id, content=output))
+                    invocations.append({"tool": call.name, "query": query})
+                    await self._log_tool_invocation(session, room, agent_key, call, success=True)
+                except ToolExecutionError as exc:
+                    tool_results.append(
+                        ToolResult(tool_call_id=call.id, content=str(exc), is_error=True)
+                    )
+                    invocations.append({"tool": call.name, "query": query, "success": False})
+                    await self._log_tool_invocation(session, room, agent_key, call, success=False)
+            turns = turns + [ChatTurn(role="user", content="", tool_results=tool_results)]
+
+        final = await self._llm.complete(
+            agent_key=agent_key, system_prompt=system_prompt, turns=turns, tools=None
+        )
+        return final, invocations
 
     # ------------------------------------------------------------------
     # Prompt & history compilation
@@ -458,6 +603,7 @@ class Orchestrator:
                 "content": m.content,
                 "input_tokens": m.input_tokens,
                 "output_tokens": m.output_tokens,
+                "tool_invocations": m.tool_invocations,
                 "created_at": m.created_at.isoformat() if m.created_at else None,
             },
         }

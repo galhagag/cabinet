@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .agents.foundry_client import build_llm_backend
 from .agents.orchestrator import Orchestrator, seed_global_config
-from .api import admin, gdrive, messages, rooms, skills, ws
+from .api import admin, gdrive, messages, rooms, skills, tools, ws
 from .config import get_settings
 from .db.base import get_sessionmaker, init_db
 from .services.blob_storage import build_blob_provider
@@ -38,15 +38,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     blob_provider = build_blob_provider(settings, secret_provider)
     manager, broker = build_realtime(settings, secret_provider)
     llm = await build_llm_backend(settings, secret_provider)
+    google_oauth = GoogleOAuthService(settings, secret_provider)
 
     app.state.settings = settings
     app.state.secret_provider = secret_provider
     app.state.blob_provider = blob_provider
     app.state.manager = manager
     app.state.broker = broker
-    app.state.orchestrator = Orchestrator(settings, llm, broker)
+    app.state.orchestrator = Orchestrator(
+        settings, llm, broker, secret_provider=secret_provider, google_oauth=google_oauth
+    )
     app.state.skills_service = SkillsService(blob_provider)
-    app.state.google_oauth = GoogleOAuthService(settings, secret_provider)
+    app.state.google_oauth = google_oauth
     app.state.entra_validator = (
         EntraTokenValidator(settings) if settings.auth_mode == "entra" else None
     )
@@ -77,6 +80,7 @@ def create_app() -> FastAPI:
     app.include_router(messages.router)
     app.include_router(gdrive.router)
     app.include_router(skills.router)
+    app.include_router(tools.router)
     app.include_router(ws.router)
 
     @app.get("/api/health")

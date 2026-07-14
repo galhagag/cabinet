@@ -122,6 +122,10 @@ class Message(Base):
     # Populated for agent replies only — usage reported by the LLM backend.
     input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # One entry per tool call made while producing this reply, e.g.
+    # {"tool": "web_search", "query": "...", "success": True}. None for
+    # messages that never used a tool.
+    tool_invocations: Mapped[list | None] = mapped_column(JSON, nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
@@ -232,6 +236,21 @@ class RoomSkillOverride(Base):
     skill_id: Mapped[str] = mapped_column(
         ForeignKey("agent_skills.id", ondelete="CASCADE"), primary_key=True
     )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class RoomToolOverride(Base):
+    """Room-scoped disable toggle for a built-in tool — identical precedent
+    to RoomSkillOverride. Tools are code-defined (TOOL_REGISTRY), not DB
+    rows; this table only ever records the disabled exception.
+    """
+
+    __tablename__ = "room_tool_overrides"
+
+    room_id: Mapped[str] = mapped_column(
+        ForeignKey("rooms.id", ondelete="CASCADE"), primary_key=True
+    )
+    tool_name: Mapped[str] = mapped_column(String(64), primary_key=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
