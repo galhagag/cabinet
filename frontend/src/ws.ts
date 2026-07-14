@@ -28,6 +28,9 @@ export type WsEventHandler = (event: RoomWsEvent) => void;
 export type WsReconnectHandler = () => void;
 export type WsStatusHandler = (state: RoomConnectionState) => void;
 
+const MAX_RECONNECT_ATTEMPTS = 5;
+const STABLE_CONNECTION_MS = 5000;
+
 export class RoomSocket {
   private ws: WebSocket | null = null;
   private roomId: string | null = null;
@@ -38,6 +41,7 @@ export class RoomSocket {
   private attempts = 0;
   private reconnectTimer: number | null = null;
   private connectedOnce = false;
+  private stableConnectionTimer: number | null = null;
 
   connect(
     roomId: string,
@@ -69,6 +73,34 @@ export class RoomSocket {
     this.onStatusChange?.(state);
   }
 
+  reconnectNow(): void {
+    if (this.closedByUser || this.roomId === null) return;
+    if (this.reconnectTimer !== null) {
+      window.clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.stableConnectionTimer !== null) {
+      window.clearTimeout(this.stableConnectionTimer);
+      this.stableConnectionTimer = null;
+    }
+    if (this.ws) {
+      const ws = this.ws;
+      this.ws = null;
+      ws.onopen = null;
+      ws.onclose = null;
+      ws.onerror = null;
+      ws.onmessage = null;
+      try {
+        ws.close();
+      } catch {
+        // already closed
+      }
+    }
+    this.attempts = 0;
+    this.emitStatus(this.connectedOnce ? "reconnecting" : "connecting");
+    this.open();
+  }
+
   private openWithUrl(roomId: string, url: string): void {
     // The room/token-acquiring await above may have outlived a close() or a
     // switch to a different room; drop a now-stale connect attempt.
@@ -85,7 +117,13 @@ export class RoomSocket {
     ws.onopen = () => {
       const reconnected = this.connectedOnce;
       this.connectedOnce = true;
-      this.attempts = 0;
+      if (this.stableConnectionTimer !== null) {
+        window.clearTimeout(this.stableConnectionTimer);
+      }
+      this.stableConnectionTimer = window.setTimeout(() => {
+        this.stableConnectionTimer = null;
+        this.attempts = 0;
+      }, STABLE_CONNECTION_MS);
       this.emitStatus("live");
       if (reconnected) {
         this.onReconnect?.();
@@ -111,6 +149,10 @@ export class RoomSocket {
 
     ws.onclose = () => {
       if (this.ws === ws) this.ws = null;
+      if (this.stableConnectionTimer !== null) {
+        window.clearTimeout(this.stableConnectionTimer);
+        this.stableConnectionTimer = null;
+      }
       this.scheduleReconnect();
     };
 
@@ -121,12 +163,15 @@ export class RoomSocket {
 
   private scheduleReconnect(): void {
     if (this.closedByUser || this.reconnectTimer !== null) return;
+    const nextAttempt = this.attempts + 1;
+    if (nextAttempt >= MAX_RECONNECT_ATTEMPTS) {
+      this.attempts = nextAttempt;
+      this.emitStatus("offline");
+      return;
+    }
     this.emitStatus(this.connectedOnce ? "reconnecting" : "connecting");
     const delay = Math.min(30000, 1000 * 2 ** this.attempts);
-    this.attempts += 1;
-    if (this.attempts >= 5) {
-      this.emitStatus("offline");
-    }
+    this.attempts = nextAttempt;
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = null;
       this.open();
@@ -139,9 +184,14 @@ export class RoomSocket {
       window.clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+    if (this.stableConnectionTimer !== null) {
+      window.clearTimeout(this.stableConnectionTimer);
+      this.stableConnectionTimer = null;
+    }
     if (this.ws) {
       const ws = this.ws;
       this.ws = null;
+      ws.onopen = null;
       ws.onclose = null;
       ws.onerror = null;
       ws.onmessage = null;
