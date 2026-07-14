@@ -1,7 +1,7 @@
 """Shared FastAPI dependencies: caller identity, authorization, singletons."""
 from __future__ import annotations
 
-from fastapi import Depends, Header, HTTPException, Request
+from fastapi import Depends, Header, HTTPException, Query, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,8 +10,10 @@ from ..agents.orchestrator import Orchestrator, RealtimeBroker
 from ..config import get_settings
 from ..db.base import get_session
 from ..db.models import Room, RoomMember
+from ..services.blob_storage import BlobStorageProvider
 from ..services.entra_auth import EntraTokenError, EntraTokenValidator
 from ..services.google_oauth import GoogleOAuthService
+from ..services.logo import LogoService
 from ..services.realtime import ConnectionManager
 from ..services.skills import SkillsService
 
@@ -118,3 +120,48 @@ def get_manager(request: Request) -> ConnectionManager:
 
 def get_broker(request: Request) -> RealtimeBroker:
     return request.app.state.broker
+
+
+def get_blob_provider(request: Request) -> BlobStorageProvider:
+    return request.app.state.blob_provider
+
+
+def get_logo_service(request: Request) -> LogoService:
+    return request.app.state.logo_service
+
+
+async def get_current_user_email_allow_query_token(
+    request: Request,
+    x_user_email: str = Header(default=DEFAULT_DEV_EMAIL),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
+    access_token: str | None = Query(default=None),
+) -> str:
+    """Same identity resolution as get_current_user_email, but also accepts
+    the Entra access token as a query param — for requests that cannot carry
+    custom headers (a plain <img src>), mirroring ws.py's WebSocket-handshake
+    fallback. See docs/superpowers/specs/2026-07-14-room-logo-design.md."""
+    settings = get_settings()
+    if settings.auth_mode != "entra":
+        return x_user_email
+    token = credentials.credentials if credentials is not None else access_token
+    if not token:
+        raise HTTPException(status_code=401, detail="missing bearer token")
+    validator: EntraTokenValidator = request.app.state.entra_validator
+    try:
+        return await validator.validate(token)
+    except EntraTokenError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+
+async def require_room_member_allow_query_token(
+    room_id: str,
+    session: AsyncSession = Depends(get_session),
+    user_email: str = Depends(get_current_user_email_allow_query_token),
+) -> str:
+    if await session.get(Room, room_id) is None:
+        raise HTTPException(status_code=404, detail="room not found")
+    if not await is_room_member(session, room_id, user_email):
+        raise HTTPException(
+            status_code=403, detail="not a member of this room — ask for an invite"
+        )
+    return user_email

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,7 +12,7 @@ from sqlalchemy.orm import aliased, selectinload
 from ..agents.orchestrator import Orchestrator, RealtimeBroker
 from ..agents.profiles import AGENT_KEYS, DISPLAY_NAMES
 from ..config import get_settings
-from ..db.base import get_session
+from ..db.base import get_session, get_sessionmaker
 from ..db.models import (
     AgentGlobalConfig,
     AuditLog,
@@ -36,7 +36,8 @@ from ..schemas import (
     RoomMemberOut,
     RoomOut,
 )
-from .deps import get_current_user_email, get_broker, get_orchestrator, require_room_member
+from ..services.logo import LogoService, logo_url_for
+from .deps import get_current_user_email, get_broker, get_logo_service, get_orchestrator, require_room_member
 
 router = APIRouter(prefix="/api/rooms", tags=["rooms"])
 
@@ -68,6 +69,29 @@ def _room_out(
             if last_message is not None
             else None
         ),
+        logo_url=logo_url_for(room),
+        logo_source=room.logo_source,
+    )
+
+
+async def _fetch_and_broadcast_logo(
+    room_id: str, logo_service: LogoService, broker: RealtimeBroker
+) -> None:
+    """Runs after the room-creation response is already sent — opens its own
+    session since the request's session is gone by then. See
+    docs/superpowers/specs/2026-07-14-room-logo-design.md."""
+    async with get_sessionmaker()() as session:
+        room = await logo_service.fetch_for_room(session, room_id)
+    if room is None:
+        return
+    await broker.publish(
+        room_id,
+        {
+            "type": "room_logo_updated",
+            "room_id": room_id,
+            "logo_url": logo_url_for(room),
+            "logo_source": room.logo_source,
+        },
     )
 
 
@@ -123,8 +147,11 @@ async def _member_counts_by_room(
 @router.post("", status_code=201, response_model=RoomOut)
 async def create_room(
     payload: RoomCreate,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
     user_email: str = Depends(get_current_user_email),
+    logo_service: LogoService = Depends(get_logo_service),
+    broker: RealtimeBroker = Depends(get_broker),
 ) -> RoomOut:
     existing = await session.execute(
         select(Room.id).where(Room.customer_name == payload.customer_name)
@@ -167,6 +194,7 @@ async def create_room(
         )
     )
     await session.commit()
+    background_tasks.add_task(_fetch_and_broadcast_logo, room.id, logo_service, broker)
     return _room_out(room, member_count=len(room.members))
 
 

@@ -193,3 +193,16 @@ def install_mock_google(app) -> list:
         transport=httpx.MockTransport(google_token_handler(calls)),
     )
     return calls
+
+
+def install_mock_logo_service(app, transport: "httpx.BaseTransport") -> None:
+    """Swap the app's LogoService for one backed by a MockTransport, mirroring
+    install_mock_google — only the HTTPS hop to Brandfetch is replaced."""
+    from app.services.logo import LogoService
+
+    app.state.logo_service = LogoService(
+        app.state.settings,
+        app.state.secret_provider,
+        app.state.blob_provider,
+        transport=transport,
+    )

@@ -14,12 +14,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .agents.foundry_client import build_llm_backend
 from .agents.orchestrator import Orchestrator, seed_global_config
-from .api import admin, gdrive, messages, rooms, skills, ws
+from .api import admin, gdrive, messages, room_logo, rooms, skills, ws
 from .config import get_settings
 from .db.base import get_sessionmaker, init_db
 from .services.blob_storage import build_blob_provider
 from .services.entra_auth import EntraTokenValidator
 from .services.google_oauth import GoogleOAuthService
+from .services.logo import LogoService
 from .services.realtime import build_realtime
 from .services.secrets import build_secret_provider
 from .services.skills import SkillsService
@@ -46,6 +47,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.broker = broker
     app.state.orchestrator = Orchestrator(settings, llm, broker)
     app.state.skills_service = SkillsService(blob_provider)
+    app.state.logo_service = LogoService(settings, secret_provider, blob_provider)
     app.state.google_oauth = GoogleOAuthService(settings, secret_provider)
     app.state.entra_validator = (
         EntraTokenValidator(settings) if settings.auth_mode == "entra" else None
@@ -77,6 +79,7 @@ def create_app() -> FastAPI:
     app.include_router(messages.router)
     app.include_router(gdrive.router)
     app.include_router(skills.router)
+    app.include_router(room_logo.router)
     app.include_router(ws.router)
 
     @app.get("/api/health")
