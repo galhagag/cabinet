@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getRoom, listMembers, listMessages, postMessage, resumeRoom } from "../api";
+import { getRoom, getUserEmail, listMembers, listMessages, postMessage, resumeRoom } from "../api";
 import type { MessageOut, RoomMemberOut, RoomOut, RoomWsEvent } from "../types";
 import { RoomSocket } from "../ws";
 import { pushToast, toastError } from "../toast";
+import { getActiveAccount, isEntraAuth } from "../auth";
 import ChatThread from "./ChatThread";
 import Composer from "./Composer";
 import PausedBanner from "./PausedBanner";
@@ -34,6 +35,8 @@ export default function RoomView({
   const [resuming, setResuming] = useState(false);
   const [thinkingAgents, setThinkingAgents] = useState<Record<string, string>>({});
   const [driveRefreshSignal, setDriveRefreshSignal] = useState(0);
+  const [instructionsRefreshSignal, setInstructionsRefreshSignal] = useState(0);
+  const [skillsRefreshSignal, setSkillsRefreshSignal] = useState(0);
   const [activeTab, setActiveTab] = useState<"chat" | "agents">("chat");
   const roomRef = useRef<RoomOut | null>(null);
   roomRef.current = room;
@@ -89,12 +92,17 @@ export default function RoomView({
         case "skill_added":
           pushToast("info", `Skill added${event.skill_name ? `: ${event.skill_name}` : ""}`);
           break;
-        case "agent_instructions_updated":
-          pushToast(
-            "info",
-            `Instructions updated for ${agentDisplayName(roomRef.current, event.agent_key)}`,
-          );
+        case "agent_instructions_updated": {
+          const currentIdentity = (isEntraAuth ? getActiveAccount()?.username : getUserEmail())?.toLowerCase();
+          if (event.actor?.toLowerCase() !== currentIdentity) {
+            pushToast(
+              "info",
+              `Instructions updated for ${agentDisplayName(roomRef.current, event.agent_key)}`,
+            );
+          }
+          setInstructionsRefreshSignal((n) => n + 1);
           break;
+        }
         case "agent_skill_toggled":
           pushToast(
             "info",
@@ -103,6 +111,7 @@ export default function RoomView({
               event.agent_key,
             )}`,
           );
+          setSkillsRefreshSignal((n) => n + 1);
           break;
         case "drive_linked":
         case "drive_connected":
@@ -298,7 +307,12 @@ export default function RoomView({
       </div>
 
       {activeTab === "agents" && room && (
-        <AgentsSkillsView roomId={roomId} agents={room.agents} />
+        <AgentsSkillsView
+          roomId={roomId}
+          agents={room.agents}
+          instructionsRefreshSignal={instructionsRefreshSignal}
+          skillsRefreshSignal={skillsRefreshSignal}
+        />
       )}
     </div>
   );

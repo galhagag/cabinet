@@ -6,9 +6,11 @@ import { pushToast, toastError } from "../toast";
 export default function AgentSkillsTab({
   roomId,
   agentKey,
+  refreshSignal = 0,
 }: {
   roomId: string;
   agentKey: AgentKey;
+  refreshSignal?: number;
 }) {
   const [skills, setSkills] = useState<SkillOut[] | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -23,7 +25,7 @@ export default function AgentSkillsTab({
         setSkills([]);
         toastError(err, "Failed to load skills");
       });
-  }, [roomId, agentKey]);
+  }, [roomId, agentKey, refreshSignal]);
 
   const upload = async () => {
     const file = fileRef.current?.files?.[0];
