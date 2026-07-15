@@ -64,8 +64,18 @@ time this runs) and never leaves a room stuck in `"pending"` forever.
 ## API changes
 
 - **`GET /api/rooms/{room_id}/logo`** *(new)* — streams the blob's bytes
-  with the appropriate `Content-Type`, gated by `require_room_member` like
-  every other room-scoped read. Used directly as an `<img src>`.
+  with the appropriate `Content-Type`. Used directly as an `<img src>`,
+  which raises the same problem `ws.py` already solved for the WebSocket
+  handshake: a browser cannot attach custom headers (`Authorization`,
+  `X-User-Email`) to a plain `<img>` request. This endpoint reuses that
+  precedent rather than inventing a new one — a
+  `require_room_member_allow_query_token` variant accepts the Entra access
+  token as an `?access_token=` query param (validated identically to the
+  bearer-header path) when no `Authorization` header is present, falling
+  back to the header in every other case. Dev auth mode is unaffected (the
+  `X-User-Email` header already defaults when absent). The frontend's
+  `RoomLogo` resolves this token async (mirroring how `api.ts` already
+  awaits `getAccessToken()`) only when `isEntraAuth` is true.
 - **`POST /api/rooms/{room_id}/logo`** *(new)* — multipart upload, modeled
   directly on `skills.py`'s existing `POST .../skills` endpoint (`file:
   UploadFile` param, sanitized path, `blob.upload()`, `AuditLog` row).

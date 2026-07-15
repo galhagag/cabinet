@@ -17,7 +17,6 @@ handoffs) with zero network and zero credentials.
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -27,11 +26,6 @@ from ..config import Settings
 from .profiles import DATA_EXPERT_KEY, FCE_KEY
 
 logger = logging.getLogger(__name__)
-
-# Strips a *nested* mock tag out of quoted history — without this, an agent
-# replying right after another mock agent echoes that agent's own
-# "[key·mock]" tag back inside its own reply.
-_MOCK_TAG_RE = re.compile(r"\[[\w.]+·mock\]\s*")
 
 
 @dataclass(frozen=True)
@@ -62,9 +56,9 @@ class LLMBackend(Protocol):
 class MockLLM:
     """Deterministic scripted agents for dev/CI.
 
-    Replies embed the agent's domain vocabulary and echo a marker so tests
-    can assert routing. Any turn containing "wrap up" triggers the
-    HANDOFF_TO_HUMAN completion token to exercise early-exit.
+    Replies embed the agent's domain vocabulary. Any turn containing
+    "wrap up" triggers the HANDOFF_TO_HUMAN completion token to exercise
+    early-exit.
     """
 
     _FLAVOR = {
@@ -84,12 +78,11 @@ class MockLLM:
     def _quote(text: str, limit: int = 80) -> str:
         """Short, clean back-reference for the ``(re: ...)`` echo.
 
-        Strips any nested "[key·mock]" tag so an untagged agent reply doesn't
-        end up quoting another agent's own tagged message, collapses merged
-        multi-message turns onto one line, and truncates on a word boundary
-        instead of a raw character slice so long quotes don't get cut mid-word.
+        Collapses merged multi-message turns onto one line and truncates on a
+        word boundary instead of a raw character slice so long quotes don't get
+        cut mid-word.
         """
-        quoted = _MOCK_TAG_RE.sub("", text).replace("\n", " ").strip()
+        quoted = text.replace("\n", " ").strip()
         if len(quoted) > limit:
             quoted = quoted[:limit].rsplit(" ", 1)[0] + "…"
         return quoted
@@ -99,7 +92,7 @@ class MockLLM:
     ) -> LLMResult:
         last = turns[-1].content if turns else ""
         flavor = self._FLAVOR.get(agent_key, "Acknowledged.")
-        reply = f"[{agent_key}·mock] {flavor} (re: {self._quote(last)})"
+        reply = f"{flavor} (re: {self._quote(last)})"
         if "wrap up" in last.lower():
             reply += " HANDOFF_TO_HUMAN"
         # ~4 chars/token — a rough but deterministic stand-in for real usage,
