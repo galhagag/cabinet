@@ -1,6 +1,8 @@
 """Shared FastAPI dependencies: caller identity, authorization, singletons."""
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from fastapi import Depends, Header, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
@@ -12,6 +14,7 @@ from ..db.base import get_session
 from ..db.models import Room, RoomMember
 from ..services.entra_auth import EntraTokenError, EntraTokenValidator
 from ..services.google_oauth import GoogleOAuthService
+from ..services.ratelimit import RateLimiter
 from ..services.realtime import ConnectionManager
 from ..services.skills import SkillsService
 
@@ -118,3 +121,66 @@ def get_manager(request: Request) -> ConnectionManager:
 
 def get_broker(request: Request) -> RealtimeBroker:
     return request.app.state.broker
+
+
+def _enforce_rate_limit(
+    request: Request,
+    *,
+    key: str,
+    scope: str,
+    limit_attr: str,
+    window_attr: str,
+) -> None:
+    settings = request.app.state.settings
+    limiter: RateLimiter = request.app.state.rate_limiter
+    limit = getattr(settings, limit_attr)
+    window = getattr(settings, window_attr)
+    decision = limiter.acquire(key=key, limit=limit, window_seconds=window)
+    if decision.allowed:
+        return
+    raise HTTPException(
+        status_code=429,
+        detail=f"{scope} rate limit exceeded; retry in {decision.retry_after}s",
+        headers={"Retry-After": str(decision.retry_after)},
+    )
+
+
+def user_rate_limit(
+    *,
+    scope: str,
+    limit_attr: str,
+    window_attr: str,
+    key_builder: Callable[[str], str] | None = None,
+):
+    async def dependency(
+        request: Request,
+        user_email: str = Depends(get_current_user_email),
+    ) -> None:
+        normalized = user_email.lower()
+        key = key_builder(normalized) if key_builder is not None else normalized
+        _enforce_rate_limit(
+            request,
+            key=f"{scope}:{key}",
+            scope=scope,
+            limit_attr=limit_attr,
+            window_attr=window_attr,
+        )
+
+    return Depends(dependency)
+
+
+def room_rate_limit(*, scope: str, limit_attr: str, window_attr: str):
+    async def dependency(
+        request: Request,
+        room_id: str,
+        user_email: str = Depends(require_room_member),
+    ) -> None:
+        _enforce_rate_limit(
+            request,
+            key=f"{scope}:{user_email.lower()}:{room_id}",
+            scope=scope,
+            limit_attr=limit_attr,
+            window_attr=window_attr,
+        )
+
+    return Depends(dependency)

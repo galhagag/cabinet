@@ -7,13 +7,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..agents.orchestrator import RealtimeBroker
 from ..agents.profiles import AGENT_KEYS
+from ..config import get_settings
 from ..db.base import get_session
 from ..db.models import AgentSkill, AuditLog, RoomSkillOverride
 from ..schemas import SkillOut, SkillToggleUpdate
-from ..services.skills import SkillsService
-from .deps import get_broker, get_skills_service, require_room_member
+from ..services.skills import SkillValidationError, SkillsService
+from .deps import get_broker, get_skills_service, require_room_member, room_rate_limit
 
 router = APIRouter(tags=["skills"])
+_UPLOAD_READ_CHUNK_SIZE = 64 * 1024
 
 
 def _skill_out(skill: AgentSkill, *, enabled: bool) -> SkillOut:
@@ -29,6 +31,31 @@ def _skill_out(skill: AgentSkill, *, enabled: bool) -> SkillOut:
     )
 
 
+def _upload_limit_for(filename: str) -> int:
+    settings = get_settings()
+    lowered = filename.lower()
+    if lowered.endswith(".md"):
+        return settings.skill_md_max_bytes
+    if lowered.endswith(".zip"):
+        return settings.skill_zip_max_bytes
+    raise HTTPException(status_code=400, detail="unsupported skill file type")
+
+
+async def _read_upload_limited(file: UploadFile, *, max_bytes: int) -> bytes:
+    data = bytearray()
+    while True:
+        chunk = await file.read(_UPLOAD_READ_CHUNK_SIZE)
+        if not chunk:
+            break
+        data.extend(chunk)
+        if len(data) > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"skill upload exceeds {max_bytes} byte limit",
+            )
+    return bytes(data)
+
+
 @router.post(
     "/api/rooms/{room_id}/agents/{agent_key}/skills",
     status_code=201,
@@ -38,6 +65,11 @@ async def upload_skill(
     room_id: str,
     agent_key: str,
     file: UploadFile,
+    _rate_limited: None = room_rate_limit(
+        scope="skill_upload",
+        limit_attr="ratelimit_skill_upload_limit",
+        window_attr="ratelimit_skill_upload_window",
+    ),
     session: AsyncSession = Depends(get_session),
     skills_service: SkillsService = Depends(get_skills_service),
     broker: RealtimeBroker = Depends(get_broker),
@@ -46,16 +78,19 @@ async def upload_skill(
     if agent_key not in AGENT_KEYS:
         raise HTTPException(status_code=400, detail=f"unknown agent: {agent_key}")
 
-    data = await file.read()
+    filename = file.filename or "upload"
+    data = await _read_upload_limited(file, max_bytes=_upload_limit_for(filename))
     try:
         skill = await skills_service.ingest(
             session,
             room_id=room_id,
             agent_key=agent_key,
-            filename=file.filename or "upload",
+            filename=filename,
             data=data,
             actor=user_email,
         )
+    except SkillValidationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

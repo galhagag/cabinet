@@ -2,6 +2,12 @@
 .gitignore
 README.md
 docs/
+.playwright-mcp/
+.pytest_cache/
+.superpowers/
+.venv/
+.worktrees/
+*.png
 
 backend/.venv/
 backend/__pycache__/
@@ -9,6 +15,8 @@ backend/**/__pycache__/
 backend/*.egg-info/
 backend/.pytest_cache/
 backend/*.db
+backend/*.bak
+backend/cabinet.db*
 backend/.blob/
 
 frontend/node_modules/

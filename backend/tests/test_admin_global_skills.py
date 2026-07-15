@@ -13,6 +13,15 @@ def _upload_global_skill(client, agent_key: str = "fce") -> dict:
     return resp.json()
 
 
+def test_oversized_global_skill_upload_rejected(client):
+    oversized = b"# Global Too Large\n" + (b"x" * 1_048_577)
+    resp = client.post(
+        "/api/admin/agents/fce/skills",
+        files={"file": ("global.md", oversized, "text/markdown")},
+    )
+    assert resp.status_code == 413, resp.text
+
+
 def test_delete_global_skill_removes_it_from_list(client):
     skill = _upload_global_skill(client)
     resp = client.delete(f"/api/admin/agents/fce/skills/{skill['id']}")

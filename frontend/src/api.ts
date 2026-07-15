@@ -32,9 +32,11 @@ export function setUserEmail(email: string): void {
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  retryAfter?: number;
+  constructor(status: number, message: string, retryAfter?: number) {
     super(message);
     this.status = status;
+    this.retryAfter = retryAfter;
     this.name = "ApiError";
   }
 }
@@ -59,6 +61,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     let detail = `${res.status} ${res.statusText}`;
+    const retryAfterHeader = res.headers.get("Retry-After");
+    const retryAfter = retryAfterHeader ? Number.parseInt(retryAfterHeader, 10) : undefined;
     try {
       const body: unknown = await res.json();
       if (body && typeof body === "object" && "detail" in body) {
@@ -68,7 +72,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     } catch {
       // no JSON body; keep the status text
     }
-    throw new ApiError(res.status, detail);
+    throw new ApiError(
+      res.status,
+      detail,
+      retryAfter !== undefined && Number.isFinite(retryAfter) ? retryAfter : undefined,
+    );
   }
 
   if (res.status === 204) {

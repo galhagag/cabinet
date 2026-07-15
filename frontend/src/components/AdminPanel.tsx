@@ -128,10 +128,11 @@ function GlobalSkillsSection({ agentKey }: { agentKey: AgentKey }) {
         />
       </label>
       <p className="muted skill-note">
-        A <code>.md</code> file extends the agent's context directly; a{" "}
-        <code>.zip</code> bundle must contain a <code>SKILL.md</code> at its
-        root. Individual rooms can still disable a global skill from their own
-        Skills tab; deleting it here removes it everywhere.
+        A <code>.md</code> file up to <code>1 MB</code> extends the agent's
+        context directly; a <code>.zip</code> bundle up to <code>5 MB</code>
+        must contain a <code>SKILL.md</code> at its root. Individual rooms can
+        still disable a global skill from their own Skills tab; deleting it
+        here removes it everywhere.
       </p>
       <button className="btn btn-primary" onClick={upload} disabled={uploading || !selectedFile}>
         {uploading ? "Uploading…" : "Upload"}

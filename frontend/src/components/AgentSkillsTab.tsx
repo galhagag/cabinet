@@ -62,8 +62,8 @@ export default function AgentSkillsTab({
         <input ref={fileRef} type="file" accept=".md,.zip" />
       </label>
       <p className="muted skill-note">
-        A <code>.md</code> file extends the agent's context directly; a <code>.zip</code>{" "}
-        bundle must contain a <code>SKILL.md</code> at its root.
+        A <code>.md</code> file up to <code>1 MB</code> extends the agent's context directly; a <code>.zip</code>{" "}
+        bundle up to <code>5 MB</code> must contain a <code>SKILL.md</code> at its root.
       </p>
       <button className="btn btn-primary" onClick={upload} disabled={uploading}>
         {uploading ? "Uploading…" : "Upload"}

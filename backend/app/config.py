@@ -121,6 +121,86 @@ class Settings:
         default_factory=lambda: _env_int("CABINET_CYCLE_LIMIT", 6, min_value=1)
     )
 
+    # --- Upload guardrails ----------------------------------------------
+    # Standalone markdown skills and the extracted SKILL.md member from zip
+    # bundles are both compiled into agent prompts, so keep them strictly
+    # bounded.
+    skill_md_max_bytes: int = field(
+        default_factory=lambda: _env_int(
+            "CABINET_SKILL_MD_MAX_BYTES", 1_048_576, min_value=1
+        )
+    )
+    # Raw uploaded zip payload upper bound before any archive inspection.
+    skill_zip_max_bytes: int = field(
+        default_factory=lambda: _env_int(
+            "CABINET_SKILL_ZIP_MAX_BYTES", 5_242_880, min_value=1
+        )
+    )
+    # Aggregate uncompressed archive budget used when screening zip bundles
+    # for decompression bombs.
+    skill_zip_total_uncompressed_max_bytes: int = field(
+        default_factory=lambda: _env_int(
+            "CABINET_SKILL_ZIP_TOTAL_UNCOMPRESSED_MAX_BYTES",
+            10_485_760,
+            min_value=1,
+        )
+    )
+
+    # --- Rate limiting -------------------------------------------------
+    ratelimit_provider: str = field(
+        default_factory=lambda: _env("CABINET_RATELIMIT_PROVIDER", "inprocess")
+    )
+    ratelimit_room_create_limit: int = field(
+        default_factory=lambda: _env_int(
+            "CABINET_RATELIMIT_ROOM_CREATE_LIMIT", 30, min_value=1
+        )
+    )
+    ratelimit_room_create_window: int = field(
+        default_factory=lambda: _env_int(
+            "CABINET_RATELIMIT_ROOM_CREATE_WINDOW", 3600, min_value=1
+        )
+    )
+    ratelimit_message_limit: int = field(
+        default_factory=lambda: _env_int(
+            "CABINET_RATELIMIT_MESSAGE_LIMIT", 10, min_value=1
+        )
+    )
+    ratelimit_message_window: int = field(
+        default_factory=lambda: _env_int(
+            "CABINET_RATELIMIT_MESSAGE_WINDOW", 60, min_value=1
+        )
+    )
+    ratelimit_resume_limit: int = field(
+        default_factory=lambda: _env_int(
+            "CABINET_RATELIMIT_RESUME_LIMIT", 6, min_value=1
+        )
+    )
+    ratelimit_resume_window: int = field(
+        default_factory=lambda: _env_int(
+            "CABINET_RATELIMIT_RESUME_WINDOW", 60, min_value=1
+        )
+    )
+    ratelimit_invite_limit: int = field(
+        default_factory=lambda: _env_int(
+            "CABINET_RATELIMIT_INVITE_LIMIT", 20, min_value=1
+        )
+    )
+    ratelimit_invite_window: int = field(
+        default_factory=lambda: _env_int(
+            "CABINET_RATELIMIT_INVITE_WINDOW", 3600, min_value=1
+        )
+    )
+    ratelimit_skill_upload_limit: int = field(
+        default_factory=lambda: _env_int(
+            "CABINET_RATELIMIT_SKILL_UPLOAD_LIMIT", 5, min_value=1
+        )
+    )
+    ratelimit_skill_upload_window: int = field(
+        default_factory=lambda: _env_int(
+            "CABINET_RATELIMIT_SKILL_UPLOAD_WINDOW", 600, min_value=1
+        )
+    )
+
     # --- Providers ------------------------------------------------------
     secrets_provider: str = field(
         default_factory=lambda: _env("CABINET_SECRETS_PROVIDER", "env")
