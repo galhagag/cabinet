@@ -24,7 +24,7 @@ import Composer from "./Composer";
 import PausedBanner from "./PausedBanner";
 import DrivePanel from "./DrivePanel";
 import InviteDialog from "./InviteDialog";
-import { AvatarCluster, type AvatarClusterItem } from "./Avatar";
+import { RoomLogo } from "./RoomLogo";
 import AgentsSkillsView from "./AgentsSkillsView";
 
 function agentDisplayName(room: RoomOut | null, agentKey: string): string {
@@ -200,13 +200,12 @@ export default function RoomView({
         case "drive_connected":
           setDriveRefreshSignal((n) => n + 1);
           break;
-        case "desync":
-          void listMessages(roomId)
-            .then(mergeMessages)
-            .catch(() => {
-              // message resync is best-effort
-            });
-          refreshRoom();
+        case "room_logo_updated":
+          setRoom((prev) =>
+            prev
+              ? { ...prev, logo_url: event.logo_url, logo_source: event.logo_source }
+              : prev,
+          );
           break;
       }
     },
@@ -270,6 +269,8 @@ export default function RoomView({
       status: room.status,
       cycles_used: room.cycles_used,
       cycle_limit: room.cycle_limit,
+      logo_url: room.logo_url,
+      logo_source: room.logo_source,
       last_message: last
         ? {
             sender_type: last.sender_type,
@@ -374,10 +375,6 @@ export default function RoomView({
     );
   }
 
-  const clusterItems: AvatarClusterItem[] = [
-    ...(room?.agents.map((a) => ({ name: a.display_name, agentKey: a.agent_key })) ?? []),
-    ...members.map((m) => ({ name: m.display_name || m.user_email, agentKey: null })),
-  ];
   const subtitle = room
     ? [...room.agents.map((a) => a.display_name), ...members.map((m) => m.display_name || m.user_email)].join(
         " · ",
@@ -399,7 +396,14 @@ export default function RoomView({
           <button className="btn-icon room-back" onClick={onClose} aria-label="Close chat">
             ←
           </button>
-          <AvatarCluster items={clusterItems} size={40} max={5} />
+          {room && (
+            <RoomLogo
+              room={room}
+              size={40}
+              editable
+              onUpdated={(patch) => setRoom((prev) => (prev ? { ...prev, ...patch } : prev))}
+            />
+          )}
           <div className="room-header-text">
             <h2 className="room-title">{room ? room.customer_name : "Loading…"}</h2>
             {room && (

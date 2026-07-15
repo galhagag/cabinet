@@ -13,6 +13,7 @@ import type {
   PostMessageResult,
   RealtimeTokenOut,
   RoomAgentDetailOut,
+  RoomLogoOut,
   RoomMemberOut,
   RoomOut,
   SkillOut,
@@ -221,3 +222,13 @@ export const toggleSkill = (
     method: "PUT",
     body: JSON.stringify({ enabled }),
   });
+
+// --- Room logo ------------------------------------------------------------------
+export const uploadRoomLogo = (roomId: string, file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  return request<RoomLogoOut>(`/api/rooms/${roomId}/logo`, {
+    method: "POST",
+    body: form,
+  });
+};

@@ -73,6 +73,8 @@ class RoomOut(BaseModel):
     agents: list[RoomAgentOut] = []
     member_count: int = 0
     last_message: RoomLastMessageOut | None = None
+    logo_url: str | None = None
+    logo_source: str = "pending"
 
 
 class RoomMemberOut(BaseModel):
@@ -80,6 +82,11 @@ class RoomMemberOut(BaseModel):
     display_name: str
     role: str
     joined_at: datetime
+
+
+class RoomLogoOut(BaseModel):
+    logo_url: str
+    logo_source: str
 
 
 class InviteCreateOut(BaseModel):

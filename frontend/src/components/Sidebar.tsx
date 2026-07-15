@@ -29,17 +29,6 @@ function previewText(room: RoomOut): string {
   return `${who}: ${body}`;
 }
 
-function clusterFor(room: RoomOut): AvatarClusterItem[] {
-  const items: AvatarClusterItem[] = room.agents.map((a) => ({
-    name: a.display_name,
-    agentKey: a.agent_key,
-  }));
-  if (room.member_count > 0) {
-    items.push({ name: `${room.member_count} human`, agentKey: null });
-  }
-  return items;
-}
-
 function NewRoomModal({
   onClose,
   onCreated,
@@ -159,7 +148,7 @@ export default function Sidebar({
               className={`chat-list-item ${selectedRoomId === room.id ? "chat-list-item-active" : ""}`}
               onClick={() => onSelectRoom(room.id)}
             >
-              <AvatarCluster items={clusterFor(room)} size={38} />
+              <RoomLogo room={room} size={38} />
               <div className="chat-list-body">
                 <div className="chat-list-top">
                   <span className="chat-list-name">{room.customer_name}</span>

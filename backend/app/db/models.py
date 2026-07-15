@@ -74,6 +74,9 @@ class Room(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, default=None
     )
+    logo_blob_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    # "pending" | "auto" | "custom" | "none" — see Room Logo design spec.
+    logo_source: Mapped[str] = mapped_column(String(16), default="pending")
 
     agents: Mapped[list["RoomAgent"]] = relationship(
         back_populates="room", cascade="all, delete-orphan"
