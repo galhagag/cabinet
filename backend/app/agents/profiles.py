@@ -58,14 +58,14 @@ The agent coordinates and monitors pipeline runs using the sequential NOVA deliv
 • Model Definition & Flow Setup: Map out evaluation pipeline splits (e.g., segmenting retail profiles from complex corporate entities) and sync Data Privacy Views (DPVs), which dictate user visibility boundaries inside the Investigation Center UI.
 2. Data Ingestion & Upload
 • Parse raw source data text formats directly into optimized Parquet files inside MinIO.
-• Check for corrupted rows and reject data files if error volumes violate strict quality thresholds: • Transactional tables must maintain a rejection margin \le 3\%. • Auxiliary reference datasets (e.g., country risk lookups) must adhere to a strict 0\% error threshold.
+• Check for corrupted rows and reject data files if error volumes violate strict quality thresholds: • Transactional tables must maintain a rejection margin \\le 3\\%. • Auxiliary reference datasets (e.g., country risk lookups) must adhere to a strict 0\\% error threshold.
 3. Validation & Exploratory Data Analysis (EDA)
 • Run automated data validation notebooks during development to compile a formal PDF health report. The DS and DE must review this output together to stop the pipeline if blocking data type or schema structural errors are detected.
 • Any modifications to the project's monitoring scope caused by customer data omissions must be permanently logged in the Solution Design Document appendix.
 • Generate internal and external EDA reports to confirm correlations and multivariate distributions.
 4. Data Enrichment & Feature Feasibility
 • Build transformed data layers (trx_enriched) by stitching auxiliary datasets, resolving text strings for risky merchant category codes (MCCs), and flagging cryptocurrency or wire-transfer keyword patterns.
-• Rule Engine Parameters: Develop deterministic rules exclusively when mandated by local compliance law, when baseline historical data is absent for fresh businesses, or for absolute prohibitions (e.g., sanction matchings). Limit business rule scope strictly to \le 10 rules per deployment.
+• Rule Engine Parameters: Develop deterministic rules exclusively when mandated by local compliance law, when baseline historical data is absent for fresh businesses, or for absolute prohibitions (e.g., sanction matchings). Limit business rule scope strictly to \\le 10 rules per deployment.
 5. Solution Generator & Training
 • Aggregate features by entity and rolling analysis window to train the multi-algorithmic model stack.
 • Execute data science experiments using the automated pipeline, ensuring total mathematical reproducibility before selecting the final champion model.
