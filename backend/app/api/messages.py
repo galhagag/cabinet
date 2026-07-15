@@ -9,7 +9,7 @@ from ..agents.orchestrator import ACTIVE, PAUSED, Orchestrator
 from ..db.base import get_session
 from ..db.models import Message, Room
 from ..schemas import MessageCreate, MessageOut, PostMessageResult
-from .deps import get_orchestrator, require_room_member
+from .deps import get_orchestrator, require_room_member, room_rate_limit
 
 router = APIRouter(prefix="/api/rooms/{room_id}", tags=["messages"])
 
@@ -47,6 +47,11 @@ async def list_messages(
 async def post_message(
     room_id: str,
     payload: MessageCreate,
+    _rate_limited: None = room_rate_limit(
+        scope="message_post",
+        limit_attr="ratelimit_message_limit",
+        window_attr="ratelimit_message_window",
+    ),
     session: AsyncSession = Depends(get_session),
     orchestrator: Orchestrator = Depends(get_orchestrator),
     user_email: str = Depends(require_room_member),
@@ -68,6 +73,11 @@ async def post_message(
 async def resume_room(
     room_id: str,
     request: Request,
+    _rate_limited: None = room_rate_limit(
+        scope="room_resume",
+        limit_attr="ratelimit_resume_limit",
+        window_attr="ratelimit_resume_window",
+    ),
     session: AsyncSession = Depends(get_session),
     orchestrator: Orchestrator = Depends(get_orchestrator),
     _member: str = Depends(require_room_member),

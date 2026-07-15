@@ -20,6 +20,7 @@ from .db.base import get_sessionmaker, init_db
 from .services.blob_storage import build_blob_provider
 from .services.entra_auth import EntraTokenValidator
 from .services.google_oauth import GoogleOAuthService
+from .services.ratelimit import build_rate_limiter
 from .services.realtime import build_realtime
 from .services.secrets import build_secret_provider
 from .services.skills import SkillsService
@@ -37,6 +38,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     secret_provider = build_secret_provider(settings)
     blob_provider = build_blob_provider(settings, secret_provider)
     manager, broker = build_realtime(settings, secret_provider)
+    rate_limiter = build_rate_limiter(settings)
     llm = await build_llm_backend(settings, secret_provider)
 
     app.state.settings = settings
@@ -44,8 +46,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.blob_provider = blob_provider
     app.state.manager = manager
     app.state.broker = broker
+    app.state.rate_limiter = rate_limiter
     app.state.orchestrator = Orchestrator(settings, llm, broker)
-    app.state.skills_service = SkillsService(blob_provider)
+    app.state.skills_service = SkillsService(
+        blob_provider,
+        md_max_bytes=settings.skill_md_max_bytes,
+        zip_max_bytes=settings.skill_zip_max_bytes,
+        zip_total_uncompressed_max_bytes=settings.skill_zip_total_uncompressed_max_bytes,
+    )
     app.state.google_oauth = GoogleOAuthService(settings, secret_provider)
     app.state.entra_validator = (
         EntraTokenValidator(settings) if settings.auth_mode == "entra" else None

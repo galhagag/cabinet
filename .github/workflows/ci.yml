@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: backend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+
+      - name: Run backend tests
+        env:
+          CABINET_SKIP_LOCAL_DOTENV: "1"
+        run: python -m pytest tests -q
+
+      - name: Verify Alembic migrations apply cleanly
+        env:
+          CABINET_SKIP_LOCAL_DOTENV: "1"
+          CABINET_DATABASE_URL: sqlite+aiosqlite:///./ci_migration.db
+        run: python -m alembic upgrade head
+
+      - name: Detect missing Alembic migration
+        env:
+          CABINET_SKIP_LOCAL_DOTENV: "1"
+          CABINET_DATABASE_URL: sqlite+aiosqlite:///./ci_migration.db
+        run: python -m alembic check
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    needs:
+      - backend
+      - frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -f infra/Dockerfile.backend -t cabinet-backend:test .
+
+      - name: Build frontend image
+        run: docker build -f infra/Dockerfile.frontend -t cabinet-frontend:test .

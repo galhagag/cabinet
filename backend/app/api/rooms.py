@@ -37,7 +37,14 @@ from ..schemas import (
     RoomMemberOut,
     RoomOut,
 )
-from .deps import get_current_user_email, get_broker, get_orchestrator, require_room_member
+from .deps import (
+    get_current_user_email,
+    get_broker,
+    get_orchestrator,
+    require_room_member,
+    room_rate_limit,
+    user_rate_limit,
+)
 
 router = APIRouter(prefix="/api/rooms", tags=["rooms"])
 
@@ -124,6 +131,11 @@ async def _member_counts_by_room(
 @router.post("", status_code=201, response_model=RoomOut)
 async def create_room(
     payload: RoomCreate,
+    _rate_limited: None = user_rate_limit(
+        scope="room_create",
+        limit_attr="ratelimit_room_create_limit",
+        window_attr="ratelimit_room_create_window",
+    ),
     session: AsyncSession = Depends(get_session),
     user_email: str = Depends(get_current_user_email),
 ) -> RoomOut:
@@ -283,6 +295,11 @@ async def list_members(
 @router.post("/{room_id}/invites", status_code=201, response_model=InviteCreateOut)
 async def create_invite(
     room_id: str,
+    _rate_limited: None = room_rate_limit(
+        scope="invite_create",
+        limit_attr="ratelimit_invite_limit",
+        window_attr="ratelimit_invite_window",
+    ),
     session: AsyncSession = Depends(get_session),
     user_email: str = Depends(require_room_member),
 ) -> InviteCreateOut:
