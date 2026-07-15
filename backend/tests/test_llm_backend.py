@@ -131,15 +131,26 @@ def test_azure_openai_complete_wraps_sdk_errors_as_llmerror():
         )
 
 
-def test_mock_reply_quote_does_not_leak_nested_tag_or_cut_mid_word():
-    """Data Expert replying right after FCE (no human turn in between) must not
-    echo FCE's already-tagged message verbatim — that nests a "[fce·mock]" tag
-    inside Data Expert's own reply and, at the old fixed 80-char cutoff, slices
-    mid-word ("6-month" -> "6-m"), making the reply look corrupted.
+def test_mock_reply_does_not_expose_backend_marker():
+    backend = MockLLM()
+    result = _run(
+        backend.complete(
+            agent_key="data_expert",
+            system_prompt="You are helpful.",
+            turns=[ChatTurn(role="user", content="hi")],
+        )
+    )
+    assert "[data_expert·mock]" not in result.text
+    assert result.text.startswith("From the data side:")
+
+
+def test_mock_reply_quote_truncates_on_word_boundary():
+    """A long quoted back-reference must truncate on a word boundary, not a raw
+    80-char slice that cuts mid-word ("6-month" -> "6-m") and looks corrupted.
     """
     backend = MockLLM()
-    fce_turn = (
-        "Financial Crime Expert: [fce·mock] From the compliance side: I'll define "
+    long_turn = (
+        "Financial Crime Expert: From the compliance side: I'll define "
         "the 6-month rolling window metrics, credit-transaction rules and country "
         "whitelist, and map the 1LOD/2LOD investigation workflow states."
     )
@@ -147,8 +158,8 @@ def test_mock_reply_quote_does_not_leak_nested_tag_or_cut_mid_word():
         backend.complete(
             agent_key="data_expert",
             system_prompt="You are helpful.",
-            turns=[ChatTurn(role="user", content=fce_turn)],
+            turns=[ChatTurn(role="user", content=long_turn)],
         )
     )
-    assert "[fce·mock]" not in result.text
     assert "6-m)" not in result.text
+    assert result.text.endswith("6-month…)")
