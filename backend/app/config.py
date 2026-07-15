@@ -355,6 +355,14 @@ class Settings:
                 "CABINET_SECRETS_PROVIDER must be 'azure_keyvault' when CABINET_ENV is "
                 "staging/production (set CABINET_ALLOW_ENV_SECRETS=1 to override)"
             )
+        if self.llm_mode not in ("foundry", "azure_openai"):
+            # Without this, a missing/misspelled CABINET_LLM_MODE silently
+            # falls back to MockLLM (see build_llm_backend) — real users would
+            # get scripted mock replies instead of a loud boot failure.
+            raise ConfigError(
+                "CABINET_LLM_MODE must be 'foundry' or 'azure_openai' when CABINET_ENV is "
+                "staging/production, got " + repr(self.llm_mode)
+            )
         # Reject "*" anywhere in the list, not just an exact "*" value — a
         # value like "https://app.example.com,*" would otherwise sail past
         # an exact-match check yet still make CORSMiddleware treat every
