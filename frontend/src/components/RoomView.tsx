@@ -353,7 +353,7 @@ export default function RoomView({
           className={`nav-link ${activeTab === "agents" ? "nav-active" : ""}`}
           onClick={() => setActiveTab("agents")}
         >
-          Agents Skills
+          Team
         </button>
       </nav>
 

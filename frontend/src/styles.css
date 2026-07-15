@@ -649,7 +649,7 @@ textarea {
   border-color: rgba(56, 136, 255, 0.3);
 }
 
-/* ---- room tabs (Chat / Agents Skills) ------------------------------------- */
+/* ---- room tabs (Chat / Team) ---------------------------------------------- */
 .room-tabs {
   display: flex;
   gap: 0.25rem;
@@ -1160,7 +1160,7 @@ textarea {
 
 .skill-item {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.7rem;
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -1182,12 +1182,80 @@ textarea {
   color: var(--text-muted);
 }
 
-.skill-item-disabled {
+.skill-item-disabled .skill-name,
+.skill-item-disabled .skill-type {
   opacity: 0.55;
 }
 
-.skill-toggle-btn {
+.skill-toggle {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.skill-toggle:disabled {
+  cursor: default;
+}
+
+.skill-toggle-track {
+  position: relative;
+  flex-shrink: 0;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--danger);
+  transition: background 0.15s ease;
+}
+
+.skill-toggle-on .skill-toggle-track {
+  background: var(--ok);
+}
+
+.skill-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s ease;
+}
+
+.skill-toggle-on .skill-toggle-thumb {
+  transform: translateX(16px);
+}
+
+.skill-toggle-state {
+  min-width: 3.6rem;
+  text-align: left;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.skill-toggle-on .skill-toggle-state {
+  color: var(--ok);
+}
+
+.skill-toggle-off .skill-toggle-state {
+  color: var(--danger);
+}
+
+.skill-toggle-busy {
+  opacity: 0.6;
+}
+
+.skill-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
 }
 
 .skill-delete-btn {
