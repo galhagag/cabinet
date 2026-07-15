@@ -28,8 +28,38 @@ from dotenv import load_dotenv
 INFRA_ENV_PATH = Path(__file__).resolve().parent.parent.parent / "infra" / ".env"
 
 
-def _load_local_dev_env(path: Path = INFRA_ENV_PATH) -> None:
-    load_dotenv(path, override=False)
+# Vars always pulled from infra/.env even when CABINET_SKIP_LOCAL_DOTENV=1.
+# These are LLM connection settings and secret values that are almost never
+# set as real process env vars on a dev machine.
+_ALWAYS_LOAD_PREFIXES = (
+    "CABINET_SECRET_",
+    "CABINET_LLM_MODE",
+    "CABINET_FOUNDRY_",
+    "CABINET_AZURE_OPENAI_",
+)
+
+
+def _load_local_dev_env(
+    path: Path = INFRA_ENV_PATH, *, llm_and_secrets_only: bool = False
+) -> None:
+    """Load infra/.env into the process environment.
+
+    When *llm_and_secrets_only* is True (i.e. CABINET_SKIP_LOCAL_DOTENV=1)
+    only CABINET_SECRET_*, CABINET_LLM_MODE, CABINET_FOUNDRY_*, and
+    CABINET_AZURE_OPENAI_* are imported so that infrastructure vars such as
+    CABINET_DATABASE_URL that point to remote resources are never picked up
+    accidentally during local dev.
+    """
+    if not path.exists():
+        return
+    if not llm_and_secrets_only:
+        load_dotenv(path, override=False)
+        return
+    from dotenv import dotenv_values  # lazy import — only needed on this path
+
+    for key, value in dotenv_values(path).items():
+        if any(key.startswith(p) for p in _ALWAYS_LOAD_PREFIXES) and key not in os.environ:
+            os.environ[key] = value or ""
 
 
 def _env(name: str, default: str = "") -> str:
@@ -339,8 +369,8 @@ class Settings:
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    if os.environ.get("CABINET_SKIP_LOCAL_DOTENV") != "1":
-        _load_local_dev_env()
+    skip_infra = os.environ.get("CABINET_SKIP_LOCAL_DOTENV") == "1"
+    _load_local_dev_env(llm_and_secrets_only=skip_infra)
     return Settings()
 
 
