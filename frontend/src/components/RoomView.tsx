@@ -1,8 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getRoom, listMembers, listMessages, postMessage, resumeRoom } from "../api";
-import type { MessageOut, RoomMemberOut, RoomOut, RoomWsEvent } from "../types";
+import {
+  ApiError,
+  editMessage,
+  getRoom,
+  getUserEmail,
+  listMembers,
+  listMessages,
+  postMessage,
+  resumeRoom,
+} from "../api";
+import type {
+  MessageOut,
+  RoomConnectionState,
+  RoomMemberOut,
+  RoomOut,
+  RoomWsEvent,
+} from "../types";
 import { RoomSocket } from "../ws";
 import { pushToast, toastError } from "../toast";
+import { getActiveAccount, isEntraAuth } from "../auth";
 import ChatThread from "./ChatThread";
 import Composer from "./Composer";
 import PausedBanner from "./PausedBanner";
@@ -15,6 +31,31 @@ function agentDisplayName(room: RoomOut | null, agentKey: string): string {
   const found = room?.agents.find((a) => a.agent_key === agentKey);
   if (found) return found.display_name;
   return agentKey === "fce" ? "Financial Crime Expert" : agentKey === "data_expert" ? "Data Expert" : agentKey;
+}
+
+const ROOM_LOAD_RETRY_DELAY_MS = 300;
+const ROOM_LOAD_ATTEMPTS = 2;
+
+function isRetryableRoomLoadError(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 0;
+}
+
+async function withRoomLoadRetry<T>(load: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  for (let attemptIndex = 0; attemptIndex < ROOM_LOAD_ATTEMPTS; attemptIndex += 1) {
+    try {
+      return await load();
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableRoomLoadError(error) || attemptIndex === ROOM_LOAD_ATTEMPTS - 1) {
+        throw error;
+      }
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, ROOM_LOAD_RETRY_DELAY_MS * (attemptIndex + 1));
+      });
+    }
+  }
+  throw lastError;
 }
 
 export default function RoomView({
@@ -34,20 +75,62 @@ export default function RoomView({
   const [resuming, setResuming] = useState(false);
   const [thinkingAgents, setThinkingAgents] = useState<Record<string, string>>({});
   const [driveRefreshSignal, setDriveRefreshSignal] = useState(0);
+  const [instructionsRefreshSignal, setInstructionsRefreshSignal] = useState(0);
+  const [skillsRefreshSignal, setSkillsRefreshSignal] = useState(0);
+  const [reloadToken, setReloadToken] = useState(0);
   const [activeTab, setActiveTab] = useState<"chat" | "agents">("chat");
+  const [connectionState, setConnectionState] = useState<RoomConnectionState>("connecting");
   const roomRef = useRef<RoomOut | null>(null);
   roomRef.current = room;
 
   const mergeMessages = useCallback((incoming: MessageOut[]) => {
     setMessages((prev) => {
-      const seen = new Set(prev.map((m) => m.id));
-      const fresh = incoming.filter((m) => !seen.has(m.id));
-      if (fresh.length === 0) return prev;
-      return [...prev, ...fresh].sort(
+      if (incoming.length === 0) return prev;
+      const merged = new Map(prev.map((message) => [message.id, message]));
+      let changed = false;
+      for (const message of incoming) {
+        const existing = merged.get(message.id);
+        if (!existing || JSON.stringify(existing) !== JSON.stringify(message)) {
+          merged.set(message.id, message);
+          changed = true;
+        }
+      }
+      if (!changed) return prev;
+      return [...merged.values()].sort(
         (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
       );
     });
   }, []);
+
+  const markSupersededMessages = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    const supersededAt = new Date().toISOString();
+    setMessages((prev) =>
+      prev.map((message) =>
+        idSet.has(message.id) && !message.superseded_at
+          ? { ...message, superseded_at: supersededAt }
+          : message,
+      ),
+    );
+  }, []);
+
+  const refreshRoom = useCallback(() => {
+    getRoom(roomId)
+      .then(setRoom)
+      .catch(() => {
+        // header refresh is best-effort
+      });
+  }, [roomId]);
+
+  const resyncRoomState = useCallback(() => {
+    listMessages(roomId)
+      .then(mergeMessages)
+      .catch(() => {
+        // message resync is best-effort
+      });
+    refreshRoom();
+  }, [mergeMessages, refreshRoom, roomId]);
 
   const handleWsEvent = useCallback(
     (event: RoomWsEvent) => {
@@ -86,15 +169,23 @@ export default function RoomView({
         case "room_resumed":
           setRoom((prev) => (prev ? { ...prev, status: "active" } : prev));
           break;
+        case "message_edited":
+          markSupersededMessages(event.superseded_message_ids);
+          break;
         case "skill_added":
           pushToast("info", `Skill added${event.skill_name ? `: ${event.skill_name}` : ""}`);
           break;
-        case "agent_instructions_updated":
-          pushToast(
-            "info",
-            `Instructions updated for ${agentDisplayName(roomRef.current, event.agent_key)}`,
-          );
+        case "agent_instructions_updated": {
+          const currentIdentity = (isEntraAuth ? getActiveAccount()?.username : getUserEmail())?.toLowerCase();
+          if (event.actor?.toLowerCase() !== currentIdentity) {
+            pushToast(
+              "info",
+              `Instructions updated for ${agentDisplayName(roomRef.current, event.agent_key)}`,
+            );
+          }
+          setInstructionsRefreshSignal((n) => n + 1);
           break;
+        }
         case "agent_skill_toggled":
           pushToast(
             "info",
@@ -103,6 +194,7 @@ export default function RoomView({
               event.agent_key,
             )}`,
           );
+          setSkillsRefreshSignal((n) => n + 1);
           break;
         case "drive_linked":
         case "drive_connected":
@@ -117,7 +209,7 @@ export default function RoomView({
           break;
       }
     },
-    [mergeMessages],
+    [markSupersededMessages, mergeMessages, refreshRoom, roomId],
   );
 
   // Initial load.
@@ -127,14 +219,28 @@ export default function RoomView({
     setMessages([]);
     setMembers([]);
     setLoadError(null);
-    Promise.all([getRoom(roomId), listMessages(roomId)])
-      .then(([r, msgs]) => {
-        if (cancelled) return;
-        setRoom(r);
-        setMessages(msgs);
+    setThinkingAgents({});
+    void withRoomLoadRetry(() => getRoom(roomId))
+      .then((nextRoom) => {
+        if (!cancelled) {
+          setRoom(nextRoom);
+        }
       })
       .catch((err) => {
-        if (!cancelled) setLoadError(err instanceof Error ? err.message : String(err));
+        if (!cancelled) {
+          setLoadError(err instanceof Error ? err.message : String(err));
+        }
+      });
+    void withRoomLoadRetry(() => listMessages(roomId))
+      .then((nextMessages) => {
+        if (!cancelled) {
+          mergeMessages(nextMessages);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          toastError(err, "Failed to load message history");
+        }
       });
     listMembers(roomId)
       .then((m) => {
@@ -146,19 +252,19 @@ export default function RoomView({
     return () => {
       cancelled = true;
     };
-  }, [roomId]);
+  }, [mergeMessages, reloadToken, roomId]);
 
   // Live socket.
   useEffect(() => {
     const socket = new RoomSocket();
-    socket.connect(roomId, handleWsEvent);
+    socket.connect(roomId, handleWsEvent, resyncRoomState, setConnectionState);
     return () => socket.close();
-  }, [roomId, handleWsEvent]);
+  }, [roomId, handleWsEvent, resyncRoomState]);
 
   // Mirror status + last message up to the sidebar so the chat list stays live.
   useEffect(() => {
     if (!room) return;
-    const last = messages[messages.length - 1];
+    const last = [...messages].reverse().find((message) => !message.superseded_at);
     onActivity(roomId, {
       status: room.status,
       cycles_used: room.cycles_used,
@@ -177,15 +283,7 @@ export default function RoomView({
     });
   }, [room, messages, roomId, onActivity]);
 
-  const refreshRoom = useCallback(() => {
-    getRoom(roomId)
-      .then(setRoom)
-      .catch(() => {
-        // header refresh is best-effort
-      });
-  }, [roomId]);
-
-  const send = async (content: string) => {
+  const send = async (content: string): Promise<boolean> => {
     setSending(true);
     try {
       const result = await postMessage(roomId, content);
@@ -200,8 +298,10 @@ export default function RoomView({
             }
           : prev,
       );
+      return true;
     } catch (err) {
       toastError(err, "Failed to send message");
+      return false;
     } finally {
       setSending(false);
       setThinkingAgents({});
@@ -232,6 +332,35 @@ export default function RoomView({
     }
   };
 
+  const handleEditMessage = async (messageId: string, content: string): Promise<boolean> => {
+    try {
+      const result = await editMessage(roomId, messageId, content);
+      markSupersededMessages(result.superseded_message_ids);
+      mergeMessages(result.messages);
+      setRoom((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: result.room_status,
+              cycles_used: result.cycles_used,
+              cycle_limit: result.cycle_limit,
+            }
+          : prev,
+      );
+      setThinkingAgents({});
+      return true;
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        pushToast("error", "That message is no longer the latest editable turn.");
+        void listMessages(roomId).then(mergeMessages).catch(() => undefined);
+        refreshRoom();
+      } else {
+        toastError(err, "Failed to edit message");
+      }
+      return false;
+    }
+  };
+
   if (loadError) {
     return (
       <div className="room-view">
@@ -239,6 +368,9 @@ export default function RoomView({
           ← Back
         </button>
         <div className="inline-error">Could not load room: {loadError}</div>
+        <button className="btn btn-small" onClick={() => setReloadToken((value) => value + 1)}>
+          Retry
+        </button>
       </div>
     );
   }
@@ -248,6 +380,14 @@ export default function RoomView({
         " · ",
       )
     : "";
+  const connectionLabel =
+    connectionState === "live"
+      ? "Live"
+      : connectionState === "reconnecting"
+        ? "Reconnecting"
+        : connectionState === "offline"
+          ? "Offline"
+          : "Connecting";
 
   return (
     <div className="room-view">
@@ -278,6 +418,7 @@ export default function RoomView({
           </div>
         </div>
         <div className="room-header-actions">
+          <span className={`connection-pill connection-pill-${connectionState}`}>{connectionLabel}</span>
           <DrivePanel roomId={roomId} refreshSignal={driveRefreshSignal} />
           <InviteDialog roomId={roomId} />
         </div>
@@ -300,9 +441,13 @@ export default function RoomView({
 
       <div className="room-chat-pane" style={{ display: activeTab === "chat" ? "contents" : "none" }}>
         {room && <PausedBanner status={room.status} onResume={resume} resuming={resuming} />}
-        <ChatThread messages={messages} thinkingAgents={thinkingAgents} />
+        <ChatThread
+          messages={messages}
+          thinkingAgents={thinkingAgents}
+          onEditMessage={handleEditMessage}
+        />
         <Composer
-          onSend={(content) => void send(content)}
+          onSend={send}
           sending={sending}
           disabled={!room}
           disabledHint={!room ? "Loading room…" : undefined}
@@ -310,7 +455,12 @@ export default function RoomView({
       </div>
 
       {activeTab === "agents" && room && (
-        <AgentsSkillsView roomId={roomId} agents={room.agents} />
+        <AgentsSkillsView
+          roomId={roomId}
+          agents={room.agents}
+          instructionsRefreshSignal={instructionsRefreshSignal}
+          skillsRefreshSignal={skillsRefreshSignal}
+        />
       )}
     </div>
   );

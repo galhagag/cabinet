@@ -35,7 +35,9 @@ async def room_stream(websocket: WebSocket, room_id: str) -> None:
             await websocket.close(code=WS_FORBIDDEN)
             return
     else:
-        user_email = websocket.headers.get("x-user-email", DEFAULT_DEV_EMAIL)
+        user_email = websocket.query_params.get("user_email") or websocket.headers.get(
+            "x-user-email", DEFAULT_DEV_EMAIL
+        )
 
     async with get_sessionmaker()() as session:
         room = await session.get(Room, room_id)

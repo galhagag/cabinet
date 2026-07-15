@@ -2,6 +2,9 @@ import { useState } from "react";
 import { createInvite } from "../api";
 import type { InviteCreateOut } from "../types";
 import { pushToast, toastError } from "../toast";
+import Modal from "./Modal";
+
+const INVITE_DIALOG_TITLE_ID = "invite-dialog-title";
 
 export default function InviteDialog({ roomId }: { roomId: string }) {
   const [open, setOpen] = useState(false);
@@ -42,14 +45,11 @@ export default function InviteDialog({ roomId }: { roomId: string }) {
         Invite stakeholders
       </button>
       {open && (
-        <div className="modal-overlay" onClick={() => setOpen(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Invite stakeholders</h3>
-              <button className="modal-close" onClick={() => setOpen(false)} aria-label="Close">
-                ×
-              </button>
-            </div>
+        <Modal
+          title="Invite stakeholders"
+          titleId={INVITE_DIALOG_TITLE_ID}
+          onClose={() => setOpen(false)}
+        >
             {creating && <div className="muted">Generating secure invite link…</div>}
             {!creating && invite && (
               <>
@@ -73,8 +73,7 @@ export default function InviteDialog({ roomId }: { roomId: string }) {
                 Generate invite link
               </button>
             )}
-          </div>
-        </div>
+        </Modal>
       )}
     </>
   );

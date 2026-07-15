@@ -5,15 +5,25 @@ import AgentDetailPanel from "./AgentDetailPanel";
 export default function AgentsSkillsView({
   roomId,
   agents,
+  instructionsRefreshSignal = 0,
+  skillsRefreshSignal = 0,
 }: {
   roomId: string;
   agents: RoomAgentOut[];
+  instructionsRefreshSignal?: number;
+  skillsRefreshSignal?: number;
 }) {
   const [selected, setSelected] = useState<RoomAgentOut | null>(null);
 
   if (selected) {
     return (
-      <AgentDetailPanel roomId={roomId} agent={selected} onBack={() => setSelected(null)} />
+      <AgentDetailPanel
+        roomId={roomId}
+        agent={selected}
+        onBack={() => setSelected(null)}
+        instructionsRefreshSignal={instructionsRefreshSignal}
+        skillsRefreshSignal={skillsRefreshSignal}
+      />
     );
   }
 

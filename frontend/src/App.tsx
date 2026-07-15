@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getUserEmail, joinRoom, listRooms, setUserEmail } from "./api";
 import { dismissToast, pushToast, subscribeToasts, toastError, type Toast } from "./toast";
 import Sidebar from "./components/Sidebar";
 import RoomView from "./components/RoomView";
 import AdminPanel from "./components/AdminPanel";
 import type { RoomOut } from "./types";
-import { getActiveAccount, isEntraAuth, signIn, signOut } from "./auth";
+import { consumePendingInviteToken, getActiveAccount, isEntraAuth, signIn, signOut } from "./auth";
 
 type View = { name: "empty" } | { name: "admin" } | { name: "room"; roomId: string };
 
@@ -104,6 +104,7 @@ export default function App() {
   const [joining, setJoining] = useState(false);
   const [rooms, setRooms] = useState<RoomOut[] | null>(null);
   const [roomsError, setRoomsError] = useState<string | null>(null);
+  const handledInviteTokenRef = useRef<string | null>(null);
 
   const refreshRooms = useCallback(() => {
     listRooms()
@@ -128,11 +129,13 @@ export default function App() {
   useEffect(() => {
     if (isEntraAuth && !getActiveAccount()) return;
     const params = new URLSearchParams(window.location.search);
-    const token = params.get("token");
+    const token = params.get("token") ?? consumePendingInviteToken();
     if (!token) return;
+    if (handledInviteTokenRef.current === token) return;
+    handledInviteTokenRef.current = token;
     setJoining(true);
     const identity = isEntraAuth
-      ? getActiveAccount()?.username ?? "unknown"
+      ? getActiveAccount()?.username ?? getUserEmail()
       : getUserEmail();
     joinRoom(token, identity)
       .then((room) => {

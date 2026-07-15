@@ -6,9 +6,12 @@ import type {
   CompiledPromptOut,
   GDriveAuthorizeOut,
   GDriveStatusOut,
+  InstructionsHistoryEntryOut,
   InviteCreateOut,
+  MessageEditResult,
   MessageOut,
   PostMessageResult,
+  RealtimeTokenOut,
   RoomAgentDetailOut,
   RoomLogoOut,
   RoomMemberOut,
@@ -70,6 +73,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new ApiError(res.status, detail);
   }
 
+  if (res.status === 204) {
+    return undefined as T;
+  }
   return (await res.json()) as T;
 }
 
@@ -86,6 +92,23 @@ export const updateAgentConfig = (agentKey: string, systemPrompt: string) =>
   request<AgentConfigOut>(`/api/admin/agents/${agentKey}`, {
     method: "PUT",
     body: JSON.stringify({ system_prompt: systemPrompt }),
+  });
+
+export const uploadGlobalSkill = (agentKey: string, file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  return request<SkillOut>(`/api/admin/agents/${agentKey}/skills`, {
+    method: "POST",
+    body: form,
+  });
+};
+
+export const listGlobalSkills = (agentKey: string) =>
+  request<SkillOut[]>(`/api/admin/agents/${agentKey}/skills`);
+
+export const deleteGlobalSkill = (agentKey: string, skillId: string) =>
+  request<void>(`/api/admin/agents/${agentKey}/skills/${skillId}`, {
+    method: "DELETE",
   });
 
 // --- Rooms --------------------------------------------------------------------
@@ -128,6 +151,11 @@ export const updateRoomAgentInstructions = (
     body: JSON.stringify({ instructions }),
   });
 
+export const getInstructionsHistory = (roomId: string, agentKey: string) =>
+  request<InstructionsHistoryEntryOut[]>(
+    `/api/rooms/${roomId}/agents/${agentKey}/instructions/history`,
+  );
+
 export const getAgentUsage = (roomId: string, agentKey: string) =>
   request<AgentUsageOut>(`/api/rooms/${roomId}/agents/${agentKey}/usage`);
 
@@ -141,12 +169,22 @@ export const postMessage = (roomId: string, content: string) =>
     body: JSON.stringify({ content }),
   });
 
+export const editMessage = (roomId: string, messageId: string, content: string) =>
+  request<MessageEditResult>(`/api/rooms/${roomId}/messages/${messageId}/edit`, {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  });
+
 export const resumeRoom = (roomId: string) =>
   request<PostMessageResult>(`/api/rooms/${roomId}/resume`, { method: "POST" });
 
 // --- Compiled prompt ----------------------------------------------------------------
 export const getCompiledPrompt = (roomId: string, agentKey: string) =>
   request<CompiledPromptOut>(`/api/rooms/${roomId}/agents/${agentKey}/compiled-prompt`);
+
+// --- Realtime ------------------------------------------------------------------------
+export const getRealtimeToken = (roomId: string) =>
+  request<RealtimeTokenOut>(`/api/rooms/${roomId}/realtime-token`);
 
 // --- Google Drive -------------------------------------------------------------------
 export const gdriveAuthorize = (roomId: string) =>

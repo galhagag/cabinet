@@ -610,6 +610,37 @@ textarea {
   flex-wrap: wrap;
 }
 
+.connection-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.connection-pill-connecting {
+  color: var(--accent);
+  background: rgba(56, 136, 255, 0.12);
+  border-color: rgba(56, 136, 255, 0.35);
+}
+
+.connection-pill-live {
+  color: var(--ok);
+  background: rgba(31, 157, 85, 0.12);
+  border-color: rgba(31, 157, 85, 0.35);
+}
+
+.connection-pill-reconnecting,
+.connection-pill-offline {
+  color: var(--warn);
+  background: rgba(200, 134, 11, 0.12);
+  border-color: rgba(200, 134, 11, 0.35);
+}
+
 /* ---- room tabs (Chat / Agents Skills) ------------------------------------- */
 .room-tabs {
   display: flex;
@@ -636,9 +667,14 @@ textarea {
 }
 
 /* ---- chat thread ------------------------------------------------------------ */
-.chat-thread {
+.chat-thread-wrap {
+  position: relative;
   flex: 1;
   min-height: 240px;
+}
+
+.chat-thread {
+  height: 100%;
   overflow-y: auto;
   background: var(--bg-raised);
   border: 1px solid var(--border);
@@ -652,6 +688,26 @@ textarea {
 .chat-empty {
   margin: auto;
   text-align: center;
+}
+
+.chat-jump-to-latest {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  border: 1px solid var(--accent);
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--accent-hover);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  padding: 0.45rem 0.75rem;
+  border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(15, 27, 53, 0.16);
+  cursor: pointer;
+}
+
+.chat-jump-to-latest:hover {
+  background: #fff;
 }
 
 .msg-row {
@@ -686,6 +742,11 @@ textarea {
   border-radius: 16px 16px 16px 4px;
   padding: 0.5rem 0.8rem;
   border: 1px solid var(--border);
+}
+
+.msg-superseded {
+  opacity: 0.58;
+  filter: saturate(0.72);
 }
 
 .msg-outgoing {
@@ -731,6 +792,19 @@ textarea {
   margin-bottom: 0.25rem;
 }
 
+.msg-badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 0.05rem 0.42rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
 .msg-sender {
   font-weight: 700;
   font-size: 0.85rem;
@@ -742,9 +816,42 @@ textarea {
   color: var(--text-muted);
 }
 
+.msg-edit-btn {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 0;
+  cursor: pointer;
+}
+
+.msg-edit-btn:hover {
+  color: var(--accent-hover);
+}
+
 .msg-content {
   white-space: normal;
   word-break: break-word;
+}
+
+.msg-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.msg-edit-textarea {
+  width: 100%;
+  min-height: 5.5rem;
+  resize: vertical;
+}
+
+.msg-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
 }
 
 .msg-content p {
@@ -1012,7 +1119,7 @@ textarea {
 .agent-editor-footer {
   margin-top: 0.7rem;
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
 }
 
 /* ---- modal ------------------------------------------------------------------------ */
@@ -1126,6 +1233,10 @@ textarea {
   margin-left: auto;
 }
 
+.skill-delete-btn {
+  margin-left: auto;
+}
+
 /* ---- agents skills view ---------------------------------------------------------- */
 .agents-skills-view {
   max-width: 900px;
@@ -1209,6 +1320,34 @@ textarea {
   white-space: pre-wrap;
   max-height: 220px;
   overflow-y: auto;
+}
+
+.instructions-history {
+  margin-top: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.instructions-history-entry {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0.6rem 0.8rem;
+}
+
+.instructions-history-old,
+.instructions-history-new {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  margin: 0.3rem 0 0;
+}
+
+.instructions-history-old {
+  color: var(--text-muted);
+  text-decoration: line-through;
 }
 
 .usage-stat-grid {

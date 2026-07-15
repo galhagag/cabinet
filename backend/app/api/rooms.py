@@ -25,6 +25,7 @@ from ..db.models import (
 from ..schemas import (
     AgentUsageOut,
     CompiledPromptOut,
+    InstructionsHistoryEntryOut,
     InstructionsUpdate,
     InviteCreateOut,
     JoinRequest,
@@ -126,7 +127,7 @@ async def _last_messages_by_room(
             )
             .label("rn"),
         )
-        .where(Message.room_id.in_(room_ids))
+        .where(Message.room_id.in_(room_ids), Message.superseded_at.is_(None))
         .subquery()
     )
     latest = aliased(Message, ranked)
@@ -401,13 +402,18 @@ async def update_room_agent_instructions(
 ) -> RoomAgentDetailOut:
     config, room_agent = await _get_agent_config_and_room_agent(session, room_id, agent_key)
 
+    old_instructions = room_agent.instructions
     room_agent.instructions = payload.instructions
     session.add(
         AuditLog(
             room_id=room_id,
             actor=user_email,
             action="room_agent_instructions_updated",
-            detail={"agent_key": agent_key},
+            detail={
+                "agent_key": agent_key,
+                "old_instructions": old_instructions,
+                "new_instructions": payload.instructions,
+            },
         )
     )
     await session.commit()
@@ -417,9 +423,43 @@ async def update_room_agent_instructions(
             "type": "agent_instructions_updated",
             "room_id": room_id,
             "agent_key": agent_key,
+            "actor": user_email,
         },
     )
     return _room_agent_detail_out(agent_key, config, room_agent)
+
+
+@router.get(
+    "/{room_id}/agents/{agent_key}/instructions/history",
+    response_model=list[InstructionsHistoryEntryOut],
+)
+async def get_instructions_history(
+    room_id: str,
+    agent_key: str,
+    session: AsyncSession = Depends(get_session),
+    _member: str = Depends(require_room_member),
+) -> list[InstructionsHistoryEntryOut]:
+    if agent_key not in AGENT_KEYS:
+        raise HTTPException(status_code=400, detail=f"unknown agent: {agent_key}")
+
+    result = await session.execute(
+        select(AuditLog)
+        .where(
+            AuditLog.room_id == room_id,
+            AuditLog.action == "room_agent_instructions_updated",
+        )
+        .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+    )
+    return [
+        InstructionsHistoryEntryOut(
+            actor=entry.actor,
+            old_instructions=entry.detail.get("old_instructions", ""),
+            new_instructions=entry.detail.get("new_instructions", ""),
+            created_at=entry.created_at,
+        )
+        for entry in result.scalars().all()
+        if entry.detail.get("agent_key") == agent_key
+    ]
 
 
 @router.get(
