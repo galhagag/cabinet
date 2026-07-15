@@ -33,7 +33,6 @@ function AgentEditor({ config, onSaved }: { config: AgentConfigOut; onSaved: (c:
       <div className="agent-editor-header">
         <h3>
           <span className={`agent-chip agent-chip-${config.agent_key}`}>{config.display_name}</span>
-          <span className="muted agent-key-label">({config.agent_key})</span>
         </h3>
         <span className="muted">
           Last updated: {new Date(config.updated_at).toLocaleString()}
@@ -58,29 +57,43 @@ function AgentEditor({ config, onSaved }: { config: AgentConfigOut; onSaved: (c:
 
 function GlobalSkillsSection({ agentKey }: { agentKey: AgentKey }) {
   const [skills, setSkills] = useState<SkillOut[] | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const loadSeqRef = useRef(0);
+
+  const resetFilePicker = () => {
+    setSelectedFile(null);
+    if (fileRef.current) fileRef.current.value = "";
+  };
 
   useEffect(() => {
+    const loadSeq = ++loadSeqRef.current;
     setSkills(null);
+    resetFilePicker();
     listGlobalSkills(agentKey)
-      .then(setSkills)
+      .then((nextSkills) => {
+        if (loadSeq !== loadSeqRef.current) return;
+        setSkills(nextSkills);
+      })
       .catch((err) => {
+        if (loadSeq !== loadSeqRef.current) return;
         setSkills([]);
         toastError(err, "Failed to load global skills");
       });
   }, [agentKey]);
 
   const upload = async () => {
-    const file = fileRef.current?.files?.[0];
+    const file = selectedFile;
     if (!file || uploading) return;
     setUploading(true);
     try {
       const skill = await uploadGlobalSkill(agentKey, file);
+      loadSeqRef.current += 1;
       setSkills((prev) => [...(prev ?? []), skill]);
       pushToast("info", `Global skill "${skill.skill_name}" added`);
-      if (fileRef.current) fileRef.current.value = "";
+      resetFilePicker();
     } catch (err) {
       toastError(err, "Global skill upload failed");
     } finally {
@@ -92,6 +105,7 @@ function GlobalSkillsSection({ agentKey }: { agentKey: AgentKey }) {
     setDeletingId(skill.id);
     try {
       await deleteGlobalSkill(agentKey, skill.id);
+      loadSeqRef.current += 1;
       setSkills((prev) => (prev ?? []).filter((s) => s.id !== skill.id));
       pushToast("info", `Global skill "${skill.skill_name}" deleted`);
     } catch (err) {
@@ -106,7 +120,12 @@ function GlobalSkillsSection({ agentKey }: { agentKey: AgentKey }) {
       <h4 className="skills-heading">Global skills — applied in every room</h4>
       <label className="field">
         <span className="field-label">Add a global skill</span>
-        <input ref={fileRef} type="file" accept=".md,.zip" />
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".md,.zip"
+          onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
+        />
       </label>
       <p className="muted skill-note">
         A <code>.md</code> file extends the agent's context directly; a{" "}
@@ -114,7 +133,7 @@ function GlobalSkillsSection({ agentKey }: { agentKey: AgentKey }) {
         root. Individual rooms can still disable a global skill from their own
         Skills tab; deleting it here removes it everywhere.
       </p>
-      <button className="btn btn-primary" onClick={upload} disabled={uploading}>
+      <button className="btn btn-primary" onClick={upload} disabled={uploading || !selectedFile}>
         {uploading ? "Uploading…" : "Upload"}
       </button>
 
