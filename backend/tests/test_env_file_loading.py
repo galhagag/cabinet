@@ -1,4 +1,4 @@
-"""Local dev must load infra/.env — see app/config.py.
+"""Local dev must load secret overrides from infra/.env — see app/config.py.
 
 `uvicorn app.main:app --reload` (the README quick start) never sees
 infra/.env on its own; without an explicit load, CABINET_SECRET_GOOGLE_OAUTH_CLIENT_ID
@@ -33,6 +33,24 @@ def test_never_overrides_a_secret_already_set(tmp_path, monkeypatch):
     _load_local_dev_env(env_file)
 
     assert os.environ["CABINET_SECRET_GOOGLE_OAUTH_CLIENT_ID"] == "already-set"
+
+
+def test_ignores_non_secret_settings_by_default(tmp_path, monkeypatch):
+    monkeypatch.delenv("CABINET_DATABASE_URL", raising=False)
+    monkeypatch.delenv("CABINET_LLM_MODE", raising=False)
+    monkeypatch.delenv("CABINET_SECRET_GOOGLE_OAUTH_CLIENT_ID", raising=False)
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "CABINET_DATABASE_URL=postgresql+asyncpg://example.invalid/cabinet\n"
+        "CABINET_LLM_MODE=azure_openai\n"
+        "CABINET_SECRET_GOOGLE_OAUTH_CLIENT_ID=real-client-id\n"
+    )
+
+    _load_local_dev_env(env_file)
+
+    assert "CABINET_DATABASE_URL" not in os.environ
+    assert "CABINET_LLM_MODE" not in os.environ
+    assert os.environ["CABINET_SECRET_GOOGLE_OAUTH_CLIENT_ID"] == "real-client-id"
 
 
 def test_missing_file_is_a_no_op(tmp_path):
