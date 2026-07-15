@@ -18,18 +18,30 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 
 # `uvicorn app.main:app --reload` (the README quick start) never sees
-# infra/.env on its own — nothing else loads it into the process. Load it
-# here so CABINET_SECRET_* dev overrides reach EnvSecretProvider; no-op if
-# the file is absent (prod/CI), and never overrides a var already set
-# (override=False default) so real container env vars always win.
+# infra/.env on its own — nothing else loads it into the process. Load the
+# local secret overrides here so CABINET_SECRET_* values reach
+# EnvSecretProvider, but do not automatically import the rest of infra/.env:
+# a production-like file can otherwise silently redirect local dev to Azure
+# services (database, auth, LLM) and make the app appear hung at startup.
+# Callers that intentionally want the full file can opt in with
+# CABINET_LOAD_FULL_INFRA_ENV=1.
 INFRA_ENV_PATH = Path(__file__).resolve().parent.parent.parent / "infra" / ".env"
+FULL_LOCAL_DOTENV_FLAG = "CABINET_LOAD_FULL_INFRA_ENV"
+LOCAL_SECRET_ENV_PREFIX = "CABINET_SECRET_"
 
 
 def _load_local_dev_env(path: Path = INFRA_ENV_PATH) -> None:
-    load_dotenv(path, override=False)
+    if os.environ.get(FULL_LOCAL_DOTENV_FLAG) == "1":
+        load_dotenv(path, override=False)
+        return
+
+    for name, value in dotenv_values(path).items():
+        if value is None or not name.startswith(LOCAL_SECRET_ENV_PREFIX):
+            continue
+        os.environ.setdefault(name, value)
 
 
 def _env(name: str, default: str = "") -> str:
