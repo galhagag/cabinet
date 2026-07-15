@@ -13,6 +13,7 @@ def _prod_settings(**overrides) -> Settings:
         admin_emails="admin@thetaray.com",
         secrets_provider="azure_keyvault",
         allowed_origins="https://app.example.com",
+        llm_mode="foundry",
     )
     base.update(overrides)
     return Settings(**base)
@@ -39,6 +40,12 @@ def test_invalid_env_value_raises():
         ({"entra_client_id": ""}, "CABINET_ENTRA_CLIENT_ID"),
         ({"admin_emails": ""}, "CABINET_ADMIN_EMAILS"),
         ({"secrets_provider": "env"}, "CABINET_SECRETS_PROVIDER"),
+        # Default llm_mode ("mock") must not sail through into staging/prod —
+        # that's the exact "agent replies are mocked" failure mode this guard
+        # closes off.
+        ({"llm_mode": "mock"}, "CABINET_LLM_MODE"),
+        ({"llm_mode": ""}, "CABINET_LLM_MODE"),
+        ({"llm_mode": "not-a-real-mode"}, "CABINET_LLM_MODE"),
         ({"allowed_origins": "*"}, "CABINET_ALLOWED_ORIGINS"),
         # A wildcard hiding among other origins must be rejected too — not
         # just an exact "*" value. Without this, CORSMiddleware still sees
@@ -53,6 +60,10 @@ def test_invalid_env_value_raises():
 def test_prod_missing_required_var_raises(overrides, expected_fragment):
     with pytest.raises(ConfigError, match=expected_fragment):
         _prod_settings(**overrides).validate_for_environment()
+
+
+def test_prod_allows_azure_openai_llm_mode():
+    _prod_settings(llm_mode="azure_openai").validate_for_environment()  # must not raise
 
 
 def test_prod_allows_env_secrets_with_explicit_escape_hatch(monkeypatch):
