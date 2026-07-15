@@ -1,8 +1,9 @@
 """ORM models — see docs/ARCHITECTURE.md §4 for the schema diagram.
 
 Every table runs unchanged on Azure Database for PostgreSQL (Flexible
-Server, prod) and SQLite (tests). Messages and audit_log rows are
-immutable and form the regulatory audit trail.
+Server, prod) and SQLite (tests). Messages and audit_log rows form the
+regulatory audit trail: message content is immutable, while supersession
+metadata records later edits without rewriting history.
 """
 from __future__ import annotations
 
@@ -117,12 +118,22 @@ class Message(Base):
     sender_name: Mapped[str] = mapped_column(String(256))
     agent_key: Mapped[str | None] = mapped_column(String(32), nullable=True)
     mention_target: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Set only on the replacement human message an edit creates; points at
+    # the message row it supersedes.
+    edit_of_id: Mapped[str | None] = mapped_column(
+        ForeignKey("messages.id", ondelete="SET NULL"), nullable=True
+    )
     cycle_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     content: Mapped[str] = mapped_column(Text)
     # Populated for agent replies only — usage reported by the LLM backend.
     input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # Set once, null -> timestamp, when a later edit retires this message
+    # from the active conversation history.
+    superseded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class RoomMember(Base):

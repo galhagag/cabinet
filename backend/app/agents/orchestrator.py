@@ -20,13 +20,22 @@ import asyncio
 import logging
 import re
 from collections import defaultdict
+from datetime import datetime, timezone
 from typing import Protocol
 
-from sqlalchemy import select, text, update
+from sqlalchemy import and_, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import Settings
-from ..db.models import AgentGlobalConfig, AgentSkill, Message, Room, RoomAgent, RoomSkillOverride
+from ..db.models import (
+    AgentGlobalConfig,
+    AgentSkill,
+    AuditLog,
+    Message,
+    Room,
+    RoomAgent,
+    RoomSkillOverride,
+)
 from .foundry_client import ChatTurn, LLMBackend, LLMError
 from .profiles import AGENT_KEYS, DATA_EXPERT_KEY, DISPLAY_NAMES, FCE_KEY
 from .prompt_compiler import SkillSection, compile_system_prompt, parse_mention
@@ -144,34 +153,147 @@ class Orchestrator:
                 mention_target=mention,
                 content=content,
             )
+            return await self._reset_and_dispatch(session, room, human_msg)
+
+    async def _reset_and_dispatch(
+        self,
+        session: AsyncSession,
+        room: Room,
+        human_msg: Message,
+        *,
+        already_added: bool = False,
+    ) -> list[Message]:
+        if not already_added:
             session.add(human_msg)
+            await session.flush()
 
-            # Freshly read under the lock: no concurrent handle_human_message
-            # or resume_room can be mid-transition on this room right now, so
-            # this reflects the true committed state (fixes the duplicate
-            # room_resumed Low — previously read from a pre-UPDATE ORM object
-            # that could already be stale under concurrency).
-            await session.refresh(room)
-            was_paused = room.status == PAUSED
-            await session.execute(
-                update(Room)
-                .where(Room.id == room.id)
-                .values(cycles_used=0, status=ACTIVE)
+        # Freshly read under the lock: no concurrent handle_human_message,
+        # handle_message_edit, or resume_room can be mid-transition on this
+        # room right now, so this reflects the true committed state.
+        await session.refresh(room)
+        was_paused = room.status == PAUSED
+        await session.execute(
+            update(Room)
+            .where(Room.id == room.id)
+            .values(cycles_used=0, status=ACTIVE)
+        )
+        await session.commit()
+        await session.refresh(room)
+        if was_paused:
+            await self._broker.publish(
+                room.id, {"type": "room_resumed", "room_id": room.id}
             )
-            await session.commit()
-            await session.refresh(room)
-            if was_paused:
-                await self._broker.publish(
-                    room.id, {"type": "room_resumed", "room_id": room.id}
-                )
-            await self._broker.publish(room.id, self._msg_event(human_msg))
+        await self._broker.publish(room.id, self._msg_event(human_msg))
 
-            created = [human_msg]
-            if mention:
-                created += await self._run_mention_reply(session, room, mention)
-            else:
-                created += await self.run_autonomous_loop(session, room)
-            return created
+        created = [human_msg]
+        if human_msg.mention_target:
+            created += await self._run_mention_reply(
+                session, room, human_msg.mention_target
+            )
+        else:
+            created += await self.run_autonomous_loop(session, room)
+        return created
+
+    async def _supersede_latest_turn(
+        self, session: AsyncSession, room: Room, target: Message
+    ) -> list[str] | None:
+        latest_human = await session.execute(
+            select(Message.id)
+            .where(
+                Message.room_id == room.id,
+                Message.sender_type == "human",
+                Message.superseded_at.is_(None),
+            )
+            .order_by(Message.seq.desc(), Message.id.desc())
+            .limit(1)
+        )
+        if latest_human.scalar_one_or_none() != target.id:
+            return None
+
+        result = await session.execute(
+            select(Message)
+            .where(
+                Message.room_id == room.id,
+                Message.superseded_at.is_(None),
+                or_(
+                    Message.seq > target.seq,
+                    and_(Message.seq == target.seq, Message.id >= target.id),
+                ),
+            )
+            .order_by(Message.seq, Message.id)
+        )
+        block = result.scalars().all()
+        if not block or block[0].id != target.id:
+            return None
+
+        expected_ids = [msg.id for msg in block]
+        now = datetime.now(timezone.utc)
+        updated = await session.execute(
+            update(Message)
+            .where(
+                Message.id.in_(expected_ids),
+                Message.superseded_at.is_(None),
+            )
+            .values(superseded_at=now)
+            .returning(Message.id)
+        )
+        updated_ids = [row[0] for row in updated.all()]
+        if set(updated_ids) != set(expected_ids):
+            return None
+        return expected_ids
+
+    async def handle_message_edit(
+        self,
+        session: AsyncSession,
+        room: Room,
+        target_id: str,
+        sender_name: str,
+        content: str,
+    ) -> tuple[list[Message], list[str]] | None:
+        async with self.room_lock(room.id):
+            await self.acquire_replica_lock(session, room.id)
+            target = await session.get(Message, target_id)
+            if target is None or target.room_id != room.id:
+                return None
+            if (
+                target.sender_type != "human"
+                or target.sender_name != sender_name
+                or target.superseded_at is not None
+            ):
+                return None
+
+            superseded_ids = await self._supersede_latest_turn(session, room, target)
+            if superseded_ids is None:
+                return None
+
+            new_msg = Message(
+                room_id=room.id,
+                sender_type="human",
+                sender_name=sender_name,
+                mention_target=parse_mention(content),
+                content=content,
+                edit_of_id=target.id,
+            )
+            session.add(new_msg)
+            await session.flush()
+            session.add(
+                AuditLog(
+                    room_id=room.id,
+                    actor=sender_name,
+                    action="message_edited",
+                    detail={
+                        "target_message_id": target.id,
+                        "replacement_message_id": new_msg.id,
+                        "superseded_message_ids": superseded_ids,
+                        "old_content": target.content,
+                        "new_content": content,
+                    },
+                )
+            )
+            created = await self._reset_and_dispatch(
+                session, room, new_msg, already_added=True
+            )
+            return created, superseded_ids
 
     # ------------------------------------------------------------------
     # Mention routing: exactly one targeted reply
@@ -398,7 +520,7 @@ class Orchestrator:
         """
         result = await session.execute(
             select(Message)
-            .where(Message.room_id == room.id)
+            .where(Message.room_id == room.id, Message.superseded_at.is_(None))
             .order_by(Message.seq.desc(), Message.id.desc())
             .limit(self._settings.history_window)
         )
@@ -434,7 +556,11 @@ class Orchestrator:
         """Alternate: whoever did NOT speak last goes first; default Data Expert."""
         result = await session.execute(
             select(Message.agent_key)
-            .where(Message.room_id == room.id, Message.sender_type == "agent")
+            .where(
+                Message.room_id == room.id,
+                Message.sender_type == "agent",
+                Message.superseded_at.is_(None),
+            )
             .order_by(Message.seq.desc(), Message.id.desc())
             .limit(1)
         )
@@ -454,11 +580,15 @@ class Orchestrator:
                 "sender_name": m.sender_name,
                 "agent_key": m.agent_key,
                 "mention_target": m.mention_target,
+                "edit_of_id": m.edit_of_id,
                 "cycle_number": m.cycle_number,
                 "content": m.content,
                 "input_tokens": m.input_tokens,
                 "output_tokens": m.output_tokens,
                 "created_at": m.created_at.isoformat() if m.created_at else None,
+                "superseded_at": (
+                    m.superseded_at.isoformat() if m.superseded_at else None
+                ),
             },
         }
 

@@ -8,7 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..agents.orchestrator import ACTIVE, PAUSED, Orchestrator
 from ..db.base import get_session
 from ..db.models import Message, Room
-from ..schemas import MessageCreate, MessageOut, PostMessageResult
+from ..schemas import (
+    MessageCreate,
+    MessageEdit,
+    MessageEditResult,
+    MessageOut,
+    PostMessageResult,
+)
 from .deps import get_orchestrator, require_room_member
 
 router = APIRouter(prefix="/api/rooms/{room_id}", tags=["messages"])
@@ -61,6 +67,64 @@ async def post_message(
         room_status=room.status,
         cycles_used=room.cycles_used,
         cycle_limit=room.cycle_limit,
+    )
+
+
+@router.post("/messages/{message_id}/edit", response_model=MessageEditResult)
+async def edit_message(
+    room_id: str,
+    message_id: str,
+    payload: MessageEdit,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    orchestrator: Orchestrator = Depends(get_orchestrator),
+    user_email: str = Depends(require_room_member),
+) -> MessageEditResult:
+    room = await _get_room(session, room_id)
+    target = await session.get(Message, message_id)
+    if target is None or target.room_id != room_id:
+        raise HTTPException(status_code=404, detail="message not found")
+    if target.sender_type != "human" or target.sender_name != user_email:
+        raise HTTPException(
+            status_code=403, detail="you can only edit your own human messages"
+        )
+    if target.superseded_at is not None:
+        raise HTTPException(
+            status_code=409, detail="message already superseded by a later edit"
+        )
+
+    result = await orchestrator.handle_message_edit(
+        session,
+        room,
+        target_id=message_id,
+        sender_name=user_email,
+        content=payload.content,
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=409,
+            detail="message is no longer the latest editable turn",
+        )
+
+    created, superseded_ids = result
+    replacement = next((msg for msg in created if msg.sender_type == "human"), None)
+    await request.app.state.broker.publish(
+        room_id,
+        {
+            "type": "message_edited",
+            "room_id": room_id,
+            "message_id": message_id,
+            "replacement_message_id": replacement.id if replacement else None,
+            "superseded_message_ids": superseded_ids,
+        },
+    )
+    await session.refresh(room)
+    return MessageEditResult(
+        messages=_message_out(created),
+        room_status=room.status,
+        cycles_used=room.cycles_used,
+        cycle_limit=room.cycle_limit,
+        superseded_message_ids=superseded_ids,
     )
 
 

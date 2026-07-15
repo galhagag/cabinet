@@ -100,7 +100,7 @@ async def _last_messages_by_room(
             )
             .label("rn"),
         )
-        .where(Message.room_id.in_(room_ids))
+        .where(Message.room_id.in_(room_ids), Message.superseded_at.is_(None))
         .subquery()
     )
     latest = aliased(Message, ranked)
