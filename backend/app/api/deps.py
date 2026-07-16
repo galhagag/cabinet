@@ -85,6 +85,29 @@ async def require_room_member(
     return user_email
 
 
+async def require_room_owner(
+    room_id: str,
+    session: AsyncSession = Depends(get_session),
+    user_email: str = Depends(require_room_member),
+) -> str:
+    """Authorize owner-only room actions: archive/unarchive/delete.
+
+    Builds on require_room_member's 404/403 so a non-member gets the same
+    "ask for an invite" response rather than leaking that they're merely
+    not the owner.
+    """
+    result = await session.execute(
+        select(RoomMember.role).where(
+            RoomMember.room_id == room_id, RoomMember.user_email == user_email
+        )
+    )
+    if result.scalar_one_or_none() != "owner":
+        raise HTTPException(
+            status_code=403, detail="only the room owner can do this"
+        )
+    return user_email
+
+
 def require_admin(user_email: str = Depends(get_current_user_email)) -> str:
     """Gate platform-admin surfaces behind CABINET_ADMIN_EMAILS.
 

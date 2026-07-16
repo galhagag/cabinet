@@ -1,7 +1,7 @@
 """add room logo fields
 
 Revision ID: d41b0e7c9a2f
-Revises: b7d4e1a9c3f2
+Revises: a1c4e7f92b56
 Create Date: 2026-07-15 14:30:00.000000
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 revision: str = 'd41b0e7c9a2f'
-down_revision: Union[str, Sequence[str], None] = 'b7d4e1a9c3f2'
+down_revision: Union[str, Sequence[str], None] = 'a1c4e7f92b56'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
