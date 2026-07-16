@@ -125,6 +125,11 @@ export default function App() {
 
   const openRoom = useCallback((roomId: string) => setView({ name: "room", roomId }), []);
 
+  const removeRoom = useCallback((roomId: string) => {
+    setRooms((prev) => (prev ? prev.filter((r) => r.id !== roomId) : prev));
+    setView((v) => (v.name === "room" && v.roomId === roomId ? { name: "empty" } : v));
+  }, []);
+
   // Handle ?token= invite links on load.
   useEffect(() => {
     if (isEntraAuth && !getActiveAccount()) return;
@@ -192,6 +197,8 @@ export default function App() {
             refreshRooms();
             openRoom(room.id);
           }}
+          onRoomUpdated={(room) => patchRoom(room.id, room)}
+          onRoomDeleted={removeRoom}
         />
         <main className="main-pane">
           {joining && <div className="joining-note">Joining room from invite link…</div>}

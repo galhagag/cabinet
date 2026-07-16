@@ -62,6 +62,8 @@ export interface RoomLastMessageOut {
   created_at: string;
 }
 
+export type RoomRole = "owner" | "member";
+
 export interface RoomOut {
   id: string;
   customer_name: string;
@@ -70,6 +72,8 @@ export interface RoomOut {
   cycles_used: number;
   cycle_limit: number;
   created_at: string;
+  archived_at: string | null;
+  role: RoomRole;
   agents: RoomAgentOut[];
   member_count: number;
   last_message: RoomLastMessageOut | null;

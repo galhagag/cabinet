@@ -143,6 +143,15 @@ export const joinRoom = (token: string, displayName: string) =>
     body: JSON.stringify({ token, display_name: displayName }),
   });
 
+export const archiveRoom = (roomId: string) =>
+  request<RoomOut>(`/api/rooms/${roomId}/archive`, { method: "POST" });
+
+export const unarchiveRoom = (roomId: string) =>
+  request<RoomOut>(`/api/rooms/${roomId}/unarchive`, { method: "POST" });
+
+export const deleteRoom = (roomId: string) =>
+  request<void>(`/api/rooms/${roomId}`, { method: "DELETE" });
+
 // --- Room agents (Agents Skills) ----------------------------------------------
 export const getRoomAgent = (roomId: string, agentKey: string) =>
   request<RoomAgentDetailOut>(`/api/rooms/${roomId}/agents/${agentKey}`);
