@@ -42,6 +42,7 @@ from .deps import (
     get_broker,
     get_orchestrator,
     require_room_member,
+    require_room_owner,
     room_rate_limit,
     user_rate_limit,
 )
@@ -50,7 +51,11 @@ router = APIRouter(prefix="/api/rooms", tags=["rooms"])
 
 
 def _room_out(
-    room: Room, *, last_message: Message | None = None, member_count: int = 0
+    room: Room,
+    *,
+    role: str,
+    last_message: Message | None = None,
+    member_count: int = 0,
 ) -> RoomOut:
     return RoomOut(
         id=room.id,
@@ -60,6 +65,8 @@ def _room_out(
         cycles_used=room.cycles_used,
         cycle_limit=room.cycle_limit,
         created_at=room.created_at,
+        archived_at=room.archived_at,
+        role=role,
         agents=[
             RoomAgentOut(agent_key=a.agent_key, display_name=a.display_name)
             for a in room.agents
@@ -77,6 +84,15 @@ def _room_out(
             else None
         ),
     )
+
+
+async def _role_for_user(session: AsyncSession, room_id: str, user_email: str) -> str:
+    result = await session.execute(
+        select(RoomMember.role).where(
+            RoomMember.room_id == room_id, RoomMember.user_email == user_email
+        )
+    )
+    return result.scalar_one_or_none() or "member"
 
 
 async def _get_room_with_agents(session: AsyncSession, room_id: str) -> Room:
@@ -180,7 +196,7 @@ async def create_room(
         )
     )
     await session.commit()
-    return _room_out(room, member_count=len(room.members))
+    return _room_out(room, role="owner", member_count=len(room.members))
 
 
 @router.get("", response_model=list[RoomOut])
@@ -189,23 +205,24 @@ async def list_rooms(
     user_email: str = Depends(get_current_user_email),
 ) -> list[RoomOut]:
     result = await session.execute(
-        select(Room)
+        select(Room, RoomMember.role)
         .join(RoomMember, RoomMember.room_id == Room.id)
         .where(RoomMember.user_email == user_email, Room.deleted_at.is_(None))
         .options(selectinload(Room.agents))
         .order_by(Room.created_at)
     )
-    rooms = list(result.scalars().all())
-    room_ids = [r.id for r in rooms]
+    rows = list(result.all())
+    room_ids = [room.id for room, _ in rows]
     last_messages = await _last_messages_by_room(session, room_ids)
     member_counts = await _member_counts_by_room(session, room_ids)
     return [
         _room_out(
             room,
+            role=role,
             last_message=last_messages.get(room.id),
             member_count=member_counts.get(room.id, 0),
         )
-        for room in rooms
+        for room, role in rows
     ]
 
 
@@ -232,7 +249,8 @@ async def join_room(
             RoomMember.room_id == room.id, RoomMember.user_email == user_email
         )
     )
-    if membership.scalar_one_or_none() is None:
+    existing_member = membership.scalar_one_or_none()
+    if existing_member is None:
         session.add(
             RoomMember(
                 room_id=room.id,
@@ -250,10 +268,14 @@ async def join_room(
             )
         )
         await session.commit()
+        role = "member"
+    else:
+        role = existing_member.role
     last_messages = await _last_messages_by_room(session, [room.id])
     member_counts = await _member_counts_by_room(session, [room.id])
     return _room_out(
         room,
+        role=role,
         last_message=last_messages.get(room.id),
         member_count=member_counts.get(room.id, 0),
     )
@@ -263,16 +285,78 @@ async def join_room(
 async def get_room(
     room_id: str,
     session: AsyncSession = Depends(get_session),
-    _member: str = Depends(require_room_member),
+    user_email: str = Depends(require_room_member),
 ) -> RoomOut:
     room = await _get_room_with_agents(session, room_id)
+    role = await _role_for_user(session, room_id, user_email)
     last_messages = await _last_messages_by_room(session, [room.id])
     member_counts = await _member_counts_by_room(session, [room.id])
     return _room_out(
         room,
+        role=role,
         last_message=last_messages.get(room.id),
         member_count=member_counts.get(room.id, 0),
     )
+
+
+@router.post("/{room_id}/archive", response_model=RoomOut)
+async def archive_room(
+    room_id: str,
+    session: AsyncSession = Depends(get_session),
+    user_email: str = Depends(require_room_owner),
+) -> RoomOut:
+    room = await _get_room_with_agents(session, room_id)
+    if room.archived_at is None:
+        room.archived_at = datetime.now(timezone.utc)
+        session.add(
+            AuditLog(room_id=room.id, actor=user_email, action="room_archived", detail={})
+        )
+        await session.commit()
+    last_messages = await _last_messages_by_room(session, [room.id])
+    member_counts = await _member_counts_by_room(session, [room.id])
+    return _room_out(
+        room,
+        role="owner",
+        last_message=last_messages.get(room.id),
+        member_count=member_counts.get(room.id, 0),
+    )
+
+
+@router.post("/{room_id}/unarchive", response_model=RoomOut)
+async def unarchive_room(
+    room_id: str,
+    session: AsyncSession = Depends(get_session),
+    user_email: str = Depends(require_room_owner),
+) -> RoomOut:
+    room = await _get_room_with_agents(session, room_id)
+    if room.archived_at is not None:
+        room.archived_at = None
+        session.add(
+            AuditLog(room_id=room.id, actor=user_email, action="room_unarchived", detail={})
+        )
+        await session.commit()
+    last_messages = await _last_messages_by_room(session, [room.id])
+    member_counts = await _member_counts_by_room(session, [room.id])
+    return _room_out(
+        room,
+        role="owner",
+        last_message=last_messages.get(room.id),
+        member_count=member_counts.get(room.id, 0),
+    )
+
+
+@router.delete("/{room_id}", status_code=204)
+async def delete_room(
+    room_id: str,
+    session: AsyncSession = Depends(get_session),
+    user_email: str = Depends(require_room_owner),
+) -> None:
+    room = await _get_room_with_agents(session, room_id)
+    room.deleted_at = datetime.now(timezone.utc)
+    session.add(
+        AuditLog(room_id=room.id, actor=user_email, action="room_deleted", detail={})
+    )
+    await session.commit()
 
 
 @router.get("/{room_id}/members", response_model=list[RoomMemberOut])

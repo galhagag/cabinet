@@ -70,6 +70,8 @@ class RoomOut(BaseModel):
     cycles_used: int
     cycle_limit: int
     created_at: datetime
+    archived_at: datetime | None = None
+    role: str
     agents: list[RoomAgentOut] = []
     member_count: int = 0
     last_message: RoomLastMessageOut | None = None
