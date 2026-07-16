@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import Settings
 from ..db.models import AgentGlobalConfig, AgentSkill, Message, Room, RoomAgent, RoomSkillOverride
-from .foundry_client import ChatTurn, LLMBackend, LLMError
+from .foundry_client import ChatTurn, LLMBackend, LLMError, strip_mock_tag
 from .profiles import AGENT_KEYS, DATA_EXPERT_KEY, DISPLAY_NAMES, FCE_KEY
 from .prompt_compiler import SkillSection, compile_system_prompt, parse_mention
 
@@ -395,6 +395,13 @@ class Orchestrator:
         (human or the other agent) is wrapped in a <participant> block so a
         member forging a line that mimics the other expert's speaker prefix
         cannot appear indistinguishable from a genuine turn (Design 06 / H14).
+
+        Any stale "[key·mock]" tag is stripped from the agent's own past
+        turns before replay. A room's history can span a MockLLM→real-backend
+        transition (e.g. a CABINET_LLM_MODE flip); without stripping, a real
+        model sees its own prior "assistant" turns literally start with that
+        tag and imitates it as an established reply-prefix convention,
+        perpetuating a mock-looking tag in genuine output indefinitely.
         """
         result = await session.execute(
             select(Message)
@@ -407,7 +414,7 @@ class Orchestrator:
         turns: list[ChatTurn] = []
         for m in history:
             if m.agent_key == agent_key:
-                role, text = "assistant", m.content
+                role, text = "assistant", strip_mock_tag(m.content)
             else:
                 role = "user"
                 text = _wrap_participant(m.sender_name, m.content)

@@ -28,10 +28,19 @@ from .profiles import DATA_EXPERT_KEY, FCE_KEY
 
 logger = logging.getLogger(__name__)
 
-# Strips a *nested* mock tag out of quoted history — without this, an agent
-# replying right after another mock agent echoes that agent's own
-# "[key·mock]" tag back inside its own reply.
+# Strips a mock tag out of history before it's re-quoted or replayed back to
+# a model as its own prior turn. Without this, an agent replying right after
+# another mock agent echoes that agent's own "[key·mock]" tag back inside its
+# own reply — and, worse, once a room's history mixes mock-era and real-LLM
+# turns (e.g. after a CABINET_LLM_MODE flip), a real model sees its own past
+# "assistant" turns literally start with "[key·mock]" and imitates that as
+# an established reply-prefix convention (Orchestrator._history_as_turns
+# strips it for exactly this reason).
 _MOCK_TAG_RE = re.compile(r"\[[\w.]+·mock\]\s*")
+
+
+def strip_mock_tag(text: str) -> str:
+    return _MOCK_TAG_RE.sub("", text)
 
 
 @dataclass(frozen=True)
@@ -89,7 +98,7 @@ class MockLLM:
         multi-message turns onto one line, and truncates on a word boundary
         instead of a raw character slice so long quotes don't get cut mid-word.
         """
-        quoted = _MOCK_TAG_RE.sub("", text).replace("\n", " ").strip()
+        quoted = strip_mock_tag(text).replace("\n", " ").strip()
         if len(quoted) > limit:
             quoted = quoted[:limit].rsplit(" ", 1)[0] + "…"
         return quoted
