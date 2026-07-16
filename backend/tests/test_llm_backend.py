@@ -15,6 +15,7 @@ from app.agents.foundry_client import (
     ChatTurn,
     MockLLM,
     build_llm_backend,
+    strip_mock_tag,
 )
 from app.config import Settings
 from app.services.secrets import EnvSecretProvider
@@ -129,6 +130,16 @@ def test_azure_openai_complete_wraps_sdk_errors_as_llmerror():
                 turns=[ChatTurn(role="user", content="hi")],
             )
         )
+
+
+def test_strip_mock_tag_removes_tag_leaves_rest_intact():
+    tagged = "[fce·mock] From the compliance side: define the rolling window."
+    assert strip_mock_tag(tagged) == "From the compliance side: define the rolling window."
+
+
+def test_strip_mock_tag_is_a_noop_on_untagged_text():
+    clean = "A perfectly ordinary reply with no bracket tags at all."
+    assert strip_mock_tag(clean) == clean
 
 
 def test_mock_reply_quote_does_not_leak_nested_tag_or_cut_mid_word():

@@ -29,7 +29,7 @@ export default function AgentsSkillsView({
 
   return (
     <div className="agents-skills-view">
-      <h2>Agents Skills</h2>
+      <h2>Your team</h2>
       <p className="muted">
         Configure each agent's instructions, skills, and usage for this room.
       </p>

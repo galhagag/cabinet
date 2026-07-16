@@ -81,11 +81,23 @@ export default function AgentSkillsTab({
             <span className={`skill-type skill-type-${s.skill_type}`}>{s.skill_type}</span>
             <span className="muted">{new Date(s.created_at).toLocaleString()}</span>
             <button
-              className="btn btn-small skill-toggle-btn"
+              type="button"
+              role="switch"
+              aria-checked={s.enabled}
+              aria-label={`${s.enabled ? "Disable" : "Enable"} ${s.skill_name}`}
+              title={s.enabled ? "Enabled — click to disable" : "Disabled — click to enable"}
+              className={`skill-toggle ${s.enabled ? "skill-toggle-on" : "skill-toggle-off"} ${
+                togglingId === s.id ? "skill-toggle-busy" : ""
+              }`}
               onClick={() => void toggle(s)}
               disabled={togglingId === s.id}
             >
-              {togglingId === s.id ? "…" : s.enabled ? "Disable" : "Enable"}
+              <span className="skill-toggle-track" aria-hidden="true">
+                <span className="skill-toggle-thumb" />
+              </span>
+              <span className="skill-toggle-state">
+                {togglingId === s.id ? "…" : s.enabled ? "Enabled" : "Disabled"}
+              </span>
             </button>
           </li>
         ))}

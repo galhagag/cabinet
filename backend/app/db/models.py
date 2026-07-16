@@ -59,11 +59,17 @@ class Room(Base):
         CheckConstraint(
             "status IN ('active', 'paused_awaiting_human')", name="ck_rooms_status"
         ),
+        CheckConstraint(
+            "logo_source IN ('pending', 'auto', 'custom', 'none')",
+            name="ck_rooms_logo_source",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     customer_name: Mapped[str] = mapped_column(String(256), unique=True)
     enrichment_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    logo_blob_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    logo_source: Mapped[str] = mapped_column(String(16), default="pending")
     # "active" | "paused_awaiting_human"
     status: Mapped[str] = mapped_column(String(32), default="active")
     cycles_used: Mapped[int] = mapped_column(Integer, default=0)

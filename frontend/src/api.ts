@@ -12,6 +12,7 @@ import type {
   PostMessageResult,
   RealtimeTokenOut,
   RoomAgentDetailOut,
+  RoomLogoOut,
   RoomMemberOut,
   RoomOut,
   SkillOut,
@@ -130,6 +131,15 @@ export const createRoom = (customerName: string, enrichmentPrompt?: string) =>
 export const listRooms = () => request<RoomOut[]>("/api/rooms");
 
 export const getRoom = (roomId: string) => request<RoomOut>(`/api/rooms/${roomId}`);
+
+export const uploadRoomLogo = (roomId: string, file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  return request<RoomLogoOut>(`/api/rooms/${roomId}/logo`, {
+    method: "POST",
+    body: form,
+  });
+};
 
 export const listMembers = (roomId: string) =>
   request<RoomMemberOut[]>(`/api/rooms/${roomId}/members`);

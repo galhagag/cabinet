@@ -4,6 +4,8 @@ export type AgentKey = "data_expert" | "fce";
 
 export type RoomStatus = "active" | "paused_awaiting_human";
 
+export type RoomLogoSource = "pending" | "auto" | "custom" | "none";
+
 export type SenderType = "human" | "agent" | "system";
 
 // --- Admin -----------------------------------------------------------------
@@ -66,6 +68,8 @@ export interface RoomOut {
   id: string;
   customer_name: string;
   enrichment_prompt: string | null;
+  logo_url: string | null;
+  logo_source: RoomLogoSource;
   status: RoomStatus;
   cycles_used: number;
   cycle_limit: number;
@@ -73,6 +77,11 @@ export interface RoomOut {
   agents: RoomAgentOut[];
   member_count: number;
   last_message: RoomLastMessageOut | null;
+}
+
+export interface RoomLogoOut {
+  logo_url: string | null;
+  logo_source: RoomLogoSource;
 }
 
 export interface RoomMemberOut {
@@ -229,6 +238,13 @@ export interface WsDriveConnected {
   type: "drive_connected";
 }
 
+export interface WsRoomLogoUpdated {
+  type: "room_logo_updated";
+  room_id: string;
+  logo_url: string | null;
+  logo_source: RoomLogoSource;
+}
+
 export interface WsDesync {
   type: "desync";
   reason: string;
@@ -244,4 +260,5 @@ export type RoomWsEvent =
   | WsAgentSkillToggled
   | WsDriveLinked
   | WsDriveConnected
+  | WsRoomLogoUpdated
   | WsDesync;

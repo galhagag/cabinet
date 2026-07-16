@@ -2,8 +2,8 @@ import { useMemo, useState, type FormEvent } from "react";
 import { createRoom } from "../api";
 import type { RoomOut } from "../types";
 import { toastError } from "../toast";
-import { AvatarCluster, type AvatarClusterItem } from "./Avatar";
 import Modal from "./Modal";
+import RoomLogo from "./RoomLogo";
 
 const NEW_ROOM_DIALOG_TITLE_ID = "new-room-dialog-title";
 
@@ -27,17 +27,6 @@ function previewText(room: RoomOut): string {
   const who = last.sender_type === "human" ? last.sender_name.split("@")[0] : last.sender_name;
   const body = last.content.replace(/\s+/g, " ").trim();
   return `${who}: ${body}`;
-}
-
-function clusterFor(room: RoomOut): AvatarClusterItem[] {
-  const items: AvatarClusterItem[] = room.agents.map((a) => ({
-    name: a.display_name,
-    agentKey: a.agent_key,
-  }));
-  if (room.member_count > 0) {
-    items.push({ name: `${room.member_count} human`, agentKey: null });
-  }
-  return items;
 }
 
 function NewRoomModal({
@@ -159,7 +148,7 @@ export default function Sidebar({
               className={`chat-list-item ${selectedRoomId === room.id ? "chat-list-item-active" : ""}`}
               onClick={() => onSelectRoom(room.id)}
             >
-              <AvatarCluster items={clusterFor(room)} size={38} />
+                <RoomLogo room={room} size={38} />
               <div className="chat-list-body">
                 <div className="chat-list-top">
                   <span className="chat-list-name">{room.customer_name}</span>
