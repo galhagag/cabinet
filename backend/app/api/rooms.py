@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,13 +34,23 @@ from ..schemas import (
     RoomAgentOut,
     RoomCreate,
     RoomLastMessageOut,
+    RoomLogoOut,
     RoomMemberOut,
     RoomOut,
+)
+from ..services.room_logo import (
+    LOGO_SOURCE_CUSTOM,
+    MAX_LOGO_UPLOAD_BYTES,
+    UPLOAD_READ_CHUNK_SIZE,
+    content_type_for_blob_path,
+    logo_url_for_room,
+    normalize_content_type,
 )
 from .deps import (
     get_current_user_email,
     get_broker,
     get_orchestrator,
+    get_room_logo_service,
     require_room_member,
     require_room_owner,
     room_rate_limit,
@@ -61,6 +71,8 @@ def _room_out(
         id=room.id,
         customer_name=room.customer_name,
         enrichment_prompt=room.enrichment_prompt,
+        logo_url=logo_url_for_room(room),
+        logo_source=room.logo_source,
         status=room.status,
         cycles_used=room.cycles_used,
         cycle_limit=room.cycle_limit,
@@ -84,6 +96,25 @@ def _room_out(
             else None
         ),
     )
+
+
+def _room_logo_out(room: Room) -> RoomLogoOut:
+    return RoomLogoOut(logo_url=logo_url_for_room(room), logo_source=room.logo_source)
+
+
+async def _read_logo_upload_limited(file: UploadFile) -> bytes:
+    data = bytearray()
+    while True:
+        chunk = await file.read(UPLOAD_READ_CHUNK_SIZE)
+        if not chunk:
+            break
+        data.extend(chunk)
+        if len(data) > MAX_LOGO_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"logo upload exceeds {MAX_LOGO_UPLOAD_BYTES} byte limit",
+            )
+    return bytes(data)
 
 
 async def _role_for_user(session: AsyncSession, room_id: str, user_email: str) -> str:
@@ -147,12 +178,14 @@ async def _member_counts_by_room(
 @router.post("", status_code=201, response_model=RoomOut)
 async def create_room(
     payload: RoomCreate,
+    background_tasks: BackgroundTasks,
     _rate_limited: None = user_rate_limit(
         scope="room_create",
         limit_attr="ratelimit_room_create_limit",
         window_attr="ratelimit_room_create_window",
     ),
     session: AsyncSession = Depends(get_session),
+    room_logo_service=Depends(get_room_logo_service),
     user_email: str = Depends(get_current_user_email),
 ) -> RoomOut:
     existing = await session.execute(
@@ -168,6 +201,7 @@ async def create_room(
     room = Room(
         customer_name=payload.customer_name,
         enrichment_prompt=payload.enrichment_prompt,
+        logo_source="pending",
         cycle_limit=settings.default_cycle_limit,
         created_by=user_email,
     )
@@ -196,6 +230,7 @@ async def create_room(
         )
     )
     await session.commit()
+    background_tasks.add_task(room_logo_service.fetch_for_room, room.id, room.customer_name)
     return _room_out(room, role="owner", member_count=len(room.members))
 
 
@@ -297,6 +332,67 @@ async def get_room(
         last_message=last_messages.get(room.id),
         member_count=member_counts.get(room.id, 0),
     )
+
+
+@router.get("/{room_id}/logo")
+async def get_room_logo(
+    room_id: str,
+    session: AsyncSession = Depends(get_session),
+    room_logo_service=Depends(get_room_logo_service),
+    _member: str = Depends(require_room_member),
+) -> Response:
+    room = await session.get(Room, room_id)
+    if room is None or room.logo_blob_path is None:
+        raise HTTPException(status_code=404, detail="room logo not found")
+    data = await room_logo_service._blob.download(room.logo_blob_path)
+    return Response(content=data, media_type=content_type_for_blob_path(room.logo_blob_path))
+
+
+@router.post("/{room_id}/logo", response_model=RoomLogoOut)
+async def upload_room_logo(
+    room_id: str,
+    file: UploadFile,
+    session: AsyncSession = Depends(get_session),
+    broker: RealtimeBroker = Depends(get_broker),
+    room_logo_service=Depends(get_room_logo_service),
+    user_email: str = Depends(require_room_member),
+) -> RoomLogoOut:
+    room = await session.get(Room, room_id)
+    if room is None or room.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="room not found")
+
+    content_type = normalize_content_type(file.content_type)
+    if content_type not in {"image/png", "image/jpeg", "image/webp"}:
+        raise HTTPException(status_code=400, detail="unsupported logo file type")
+
+    data = await _read_logo_upload_limited(file)
+    old_path = room.logo_blob_path
+    try:
+        room.logo_blob_path = await room_logo_service.upload_logo_bytes(
+            room, data=data, content_type=content_type
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    room.logo_source = LOGO_SOURCE_CUSTOM
+    session.add(
+        AuditLog(
+            room_id=room.id,
+            actor=user_email,
+            action="room_logo_uploaded",
+            detail={"uploaded_by": user_email},
+        )
+    )
+    await session.commit()
+    if old_path and old_path != room.logo_blob_path:
+        await room_logo_service._blob.delete(old_path)
+    payload = {
+        "type": "room_logo_updated",
+        "room_id": room.id,
+        "logo_url": logo_url_for_room(room),
+        "logo_source": room.logo_source,
+    }
+    await broker.publish(room.id, payload)
+    return _room_logo_out(room)
 
 
 @router.post("/{room_id}/archive", response_model=RoomOut)

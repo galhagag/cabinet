@@ -11,7 +11,10 @@ from app.db.base import Base
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers defaults to True, which would silently
+    # disable every already-created app logger (e.g. app.agents.foundry_client)
+    # for the rest of the process once init_db() runs a migration in dev/CI.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # `Config.set_main_option`/`get_section` round-trip the value through
 # `configparser`, which treats `%` as the start of a pyformat interpolation

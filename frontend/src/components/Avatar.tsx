@@ -24,7 +24,7 @@ function hash(str: string): number {
   return Math.abs(h);
 }
 
-function initialsFor(name: string): string {
+export function initialsFor(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";
   if (parts.length === 1) {
@@ -35,6 +35,10 @@ function initialsFor(name: string): string {
     return (letters[0] ?? "?").toUpperCase();
   }
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+export function avatarBackgroundFor(name: string): string {
+  return PALETTE[hash(name) % PALETTE.length];
 }
 
 export function Avatar({
@@ -56,7 +60,7 @@ export function Avatar({
     width: size,
     height: size,
     fontSize: Math.max(10, Math.round(size * 0.38)),
-    ...(agent ? {} : { background: PALETTE[hash(name) % PALETTE.length] }),
+    ...(agent ? {} : { background: avatarBackgroundFor(name) }),
   };
   return (
     <span

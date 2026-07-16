@@ -16,6 +16,7 @@ from ..services.entra_auth import EntraTokenError, EntraTokenValidator
 from ..services.google_oauth import GoogleOAuthService
 from ..services.ratelimit import RateLimiter
 from ..services.realtime import ConnectionManager
+from ..services.room_logo import RoomLogoService
 from ..services.skills import SkillsService
 
 DEFAULT_DEV_EMAIL = "dev@thetaray.com"
@@ -136,6 +137,10 @@ def get_google_oauth(request: Request) -> GoogleOAuthService:
 
 def get_skills_service(request: Request) -> SkillsService:
     return request.app.state.skills_service
+
+
+def get_room_logo_service(request: Request) -> RoomLogoService:
+    return request.app.state.room_logo_service
 
 
 def get_manager(request: Request) -> ConnectionManager:

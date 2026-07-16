@@ -22,6 +22,7 @@ from .services.entra_auth import EntraTokenValidator
 from .services.google_oauth import GoogleOAuthService
 from .services.ratelimit import build_rate_limiter
 from .services.realtime import build_realtime
+from .services.room_logo import RoomLogoService
 from .services.secrets import build_secret_provider
 from .services.skills import SkillsService
 
@@ -40,6 +41,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     manager, broker = build_realtime(settings, secret_provider)
     rate_limiter = build_rate_limiter(settings)
     llm = await build_llm_backend(settings, secret_provider)
+    room_logo_service = RoomLogoService(
+        blob_provider,
+        secret_provider,
+        get_sessionmaker(),
+        broker,
+    )
 
     app.state.settings = settings
     app.state.secret_provider = secret_provider
@@ -48,6 +55,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.broker = broker
     app.state.rate_limiter = rate_limiter
     app.state.orchestrator = Orchestrator(settings, llm, broker)
+    app.state.room_logo_service = room_logo_service
     app.state.skills_service = SkillsService(
         blob_provider,
         md_max_bytes=settings.skill_md_max_bytes,

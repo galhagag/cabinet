@@ -38,3 +38,17 @@ def test_no_instructions_section_when_empty(client):
         f"/api/rooms/{room['id']}/agents/fce/compiled-prompt"
     ).json()["compiled_prompt"]
     assert "## Agent Instructions (this room)" not in compiled
+
+
+def test_baseline_documents_the_handoff_token(client):
+    """The autonomous loop only exits early when an agent's reply contains
+    HANDOFF_TO_HUMAN (Orchestrator.run_autonomous_loop). A baseline that never
+    mentions the token gives the model no way to know that mechanism exists,
+    so every unmentioned message — including a bare "good morning" — burns
+    the full cycle budget instead of closing out early."""
+    room = make_room(client, "LayeringBank3")
+    for agent_key in ("data_expert", "fce"):
+        compiled = client.get(
+            f"/api/rooms/{room['id']}/agents/{agent_key}/compiled-prompt"
+        ).json()["compiled_prompt"]
+        assert "HANDOFF_TO_HUMAN" in compiled

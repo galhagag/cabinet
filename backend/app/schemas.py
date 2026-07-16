@@ -66,6 +66,8 @@ class RoomOut(BaseModel):
     id: str
     customer_name: str
     enrichment_prompt: str | None
+    logo_url: str | None = None
+    logo_source: str
     status: str
     cycles_used: int
     cycle_limit: int
@@ -75,6 +77,11 @@ class RoomOut(BaseModel):
     agents: list[RoomAgentOut] = []
     member_count: int = 0
     last_message: RoomLastMessageOut | None = None
+
+
+class RoomLogoOut(BaseModel):
+    logo_url: str | None = None
+    logo_source: str
 
 
 class RoomMemberOut(BaseModel):

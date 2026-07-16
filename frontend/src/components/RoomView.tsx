@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getRoom, getUserEmail, listMembers, listMessages, postMessage, resumeRoom } from "../api";
+import { getRoom, getUserEmail, listMessages, postMessage, resumeRoom } from "../api";
 import type {
   MessageOut,
   RoomConnectionState,
-  RoomMemberOut,
+  RoomLogoOut,
   RoomOut,
   RoomWsEvent,
 } from "../types";
@@ -15,13 +15,19 @@ import Composer from "./Composer";
 import PausedBanner from "./PausedBanner";
 import DrivePanel from "./DrivePanel";
 import InviteDialog from "./InviteDialog";
-import { AvatarCluster, type AvatarClusterItem } from "./Avatar";
 import AgentsSkillsView from "./AgentsSkillsView";
+import RoomLogo from "./RoomLogo";
 
 function agentDisplayName(room: RoomOut | null, agentKey: string): string {
   const found = room?.agents.find((a) => a.agent_key === agentKey);
   if (found) return found.display_name;
   return agentKey === "fce" ? "Financial Crime Expert" : agentKey === "data_expert" ? "Data Expert" : agentKey;
+}
+
+function roomSubtitle(room: RoomOut): string {
+  const experts = room.agents.length === 1 ? "1 expert" : `${room.agents.length} experts`;
+  const participants = room.member_count === 1 ? "1 participant" : `${room.member_count} participants`;
+  return `${experts} · ${participants}`;
 }
 
 export default function RoomView({
@@ -35,7 +41,6 @@ export default function RoomView({
 }) {
   const [room, setRoom] = useState<RoomOut | null>(null);
   const [messages, setMessages] = useState<MessageOut[]>([]);
-  const [members, setMembers] = useState<RoomMemberOut[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [resuming, setResuming] = useState(false);
@@ -142,6 +147,17 @@ export default function RoomView({
         case "drive_connected":
           setDriveRefreshSignal((n) => n + 1);
           break;
+        case "room_logo_updated":
+          setRoom((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  logo_url: event.logo_url,
+                  logo_source: event.logo_source,
+                }
+              : prev,
+          );
+          break;
         case "desync":
           void listMessages(roomId)
             .then(mergeMessages)
@@ -160,7 +176,6 @@ export default function RoomView({
     let cancelled = false;
     setRoom(null);
     setMessages([]);
-    setMembers([]);
     setLoadError(null);
     Promise.all([getRoom(roomId), listMessages(roomId)])
       .then(([r, msgs]) => {
@@ -170,13 +185,6 @@ export default function RoomView({
       })
       .catch((err) => {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : String(err));
-      });
-    listMembers(roomId)
-      .then((m) => {
-        if (!cancelled) setMembers(m);
-      })
-      .catch(() => {
-        // header avatar cluster degrades gracefully without member details
       });
     return () => {
       cancelled = true;
@@ -204,6 +212,8 @@ export default function RoomView({
       status: room.status,
       cycles_used: room.cycles_used,
       cycle_limit: room.cycle_limit,
+      logo_url: room.logo_url,
+      logo_source: room.logo_source,
       last_message: last
         ? {
             sender_type: last.sender_type,
@@ -281,15 +291,7 @@ export default function RoomView({
     );
   }
 
-  const clusterItems: AvatarClusterItem[] = [
-    ...(room?.agents.map((a) => ({ name: a.display_name, agentKey: a.agent_key })) ?? []),
-    ...members.map((m) => ({ name: m.display_name || m.user_email, agentKey: null })),
-  ];
-  const subtitle = room
-    ? [...room.agents.map((a) => a.display_name), ...members.map((m) => m.display_name || m.user_email)].join(
-        " · ",
-      )
-    : "";
+  const subtitle = room ? roomSubtitle(room) : "";
   const connectionLabel =
     connectionState === "live"
       ? "Live"
@@ -306,7 +308,14 @@ export default function RoomView({
           <button className="btn-icon room-back" onClick={onClose} aria-label="Close chat">
             ←
           </button>
-          <AvatarCluster items={clusterItems} size={40} max={5} />
+          <RoomLogo
+            room={room}
+            size={40}
+            editable
+            onUpdated={(patch: RoomLogoOut) => {
+              setRoom((prev) => (prev ? { ...prev, ...patch } : prev));
+            }}
+          />
           <div className="room-header-text">
             <h2 className="room-title">{room ? room.customer_name : "Loading…"}</h2>
             {room && (
@@ -314,7 +323,7 @@ export default function RoomView({
                 {room.status === "paused_awaiting_human" ? (
                   <span className="room-status-paused">Paused — awaiting human</span>
                 ) : (
-                  <span className="room-status-active">{subtitle || "Active"}</span>
+                  <span className="room-status-active">{subtitle || "Active collaboration"}</span>
                 )}
               </span>
             )}
